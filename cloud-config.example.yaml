@@ -1,0 +1,771 @@
+#cloud-config
+# Target: Oracle Linux 9 (UEK7)
+# Stack: Traefik, Authelia, Cockpit, WireGuard (wg-easy), Rootless Podman
+#
+# ==============================================================
+# TEMPLATE FILE — DO NOT USE DIRECTLY AS INSTANCE USER DATA
+# ==============================================================
+#
+# This file contains template variables in ${VARIABLE} syntax.
+# Process it with envsubst before deployment:
+#
+#   1. Copy .env.example to .env
+#   2. Fill in all values in .env
+#   3. Run:
+#        export $(cat .env | xargs)
+#        envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
+#          < cloud-config.example.yaml > cloud-config.yaml
+#   4. Use cloud-config.yaml as instance user data
+#   5. Do not commit .env or cloud-config.yaml to version control
+#
+# See stack-guide.md Section 6 for full deployment instructions.
+#
+# ==============================================================
+# PREREQUISITES (must exist before launching the instance):
+# ==============================================================
+#
+#   OCI Infrastructure:
+#   - VCN with Security List/NSG open on TCP 80, 443 and UDP 51820
+#   - Block volume attached to the instance (paravirtualized).
+#     Default device path: /dev/oracleoci/oraclevdb. The script also
+#     probes /dev/sdb and /dev/vdb — no manual change needed if the
+#     volume appears under a different path.
+#   - Instance Principal IAM policy granting read on secret-family
+#     in the Vault compartment
+#
+#   OCI Vault (three secrets required):
+#   - Secret name: traefik-cloudflare-token  → Cloudflare DNS API token
+#   - Secret name: authelia-admin-password   → Authelia admin password
+#   - Secret name: wg-easy-admin-password    → wg-easy admin password
+#   See stack-guide.md Section 7 for setup steps.
+#
+#   Cloudflare DNS (all records must exist before first boot):
+#   - auth.${DOMAIN}     A  <instance public IP>  DNS Only
+#   - traefik.${DOMAIN}  A  <instance public IP>  DNS Only
+#   - metrics.${DOMAIN}  A  <instance public IP>  DNS Only
+#   - cockpit.${DOMAIN}  A  <instance public IP>  DNS Only
+#   - wg.${DOMAIN}       A  <instance public IP>  DNS Only
+#   Admin subdomains must be DNS Only (grey cloud), not proxied.
+#   See stack-guide.md Section 8 for full DNS setup.
+#
+# NOTE: 10.0.0.x in the wg-easy config is correct wg-easy syntax,
+#       not a template placeholder.
+#
+# ==============================================================
+
+# ======================= USERS & GROUPS =======================
+groups:
+  - traefik
+
+users:
+  - name: traefik
+    groups: traefik
+    system: true
+    shell: /usr/sbin/nologin
+    lock_passwd: true
+
+# ======================= PACKAGES =============================
+package_update: true
+package_upgrade: true
+
+packages:
+  - wireguard-tools # Host-based VPN tooling
+  - cockpit # Web console & monitoring
+  - cockpit-podman
+  - pcp # Performance Co-Pilot
+  - audit # Kernel audit daemon
+  - policycoreutils-python-utils
+  - iptables-nft # iptables compatibility on nftables (OL9)
+  - curl
+  - git
+  - tar
+  - gzip
+  # Note: container-tools is a DNF module on OL9, enabled via runcmd
+
+# ======================= FILE SYSTEM ==========================
+write_files:
+  # -----------------------------------------------------------
+  # Traefik Static Configuration
+  # -----------------------------------------------------------
+  - path: /etc/traefik/traefik.yaml
+    owner: traefik:traefik
+    permissions: "0644"
+    content: |
+      api:
+        dashboard: true
+        insecure: false
+
+      metrics:
+        prometheus:
+          entryPoint: metrics
+
+      entryPoints:
+        web:
+          address: ":80"
+          http:
+            redirections:
+              entryPoint:
+                to: websecure
+                scheme: https
+        websecure:
+          address: ":443"
+          http:
+            tls:
+              options: default
+        metrics:
+          address: "127.0.0.1:8082"   # Internal only — not exposed in firewall
+
+      providers:
+        file:
+          directory: /etc/traefik/config
+          watch: true
+
+      certificatesResolvers:
+        cloudflare:
+          acme:
+            email: "${ACME_EMAIL}"
+            storage: "/etc/traefik/letsencrypt/acme.json"
+            dnsChallenge:
+              provider: cloudflare
+              resolvers:
+                - "1.1.1.1:53"
+                - "1.0.0.1:53"
+
+      accessLog:
+        filePath: "/var/log/traefik/access.log"
+        format: json
+
+  # -----------------------------------------------------------
+  # Traefik Dynamic Configuration: Infrastructure Routes
+  # -----------------------------------------------------------
+  - path: /etc/traefik/config/infra.yaml
+    owner: traefik:traefik
+    permissions: "0644"
+    content: |
+      http:
+        routers:
+          # Authelia SSO portal — VPN-restricted, no forwardAuth (avoids circular redirect)
+          authelia:
+            rule: "Host(`auth.${DOMAIN}`)"
+            entryPoints:
+              - websecure
+            service: authelia-svc
+            middlewares:
+              - wg-allowlist
+            tls:
+              certResolver: cloudflare
+
+          # Traefik dashboard — VPN + Authelia 2FA
+          dashboard:
+            rule: "Host(`traefik.${DOMAIN}`)"
+            entryPoints:
+              - websecure
+            service: api@internal
+            middlewares:
+              - admin-chain
+            tls:
+              certResolver: cloudflare
+
+          # Prometheus metrics endpoint — VPN + Authelia 1FA (read-only data)
+          prometheus:
+            rule: "Host(`metrics.${DOMAIN}`)"
+            entryPoints:
+              - websecure
+            service: prometheus-svc
+            middlewares:
+              - admin-chain
+            tls:
+              certResolver: cloudflare
+
+          # WireGuard management UI — VPN + Authelia 2FA
+          wg-easy:
+            rule: "Host(`wg.${DOMAIN}`)"
+            entryPoints:
+              - websecure
+            service: wg-easy-svc
+            middlewares:
+              - admin-chain
+            tls:
+              certResolver: cloudflare
+
+        services:
+          authelia-svc:
+            loadBalancer:
+              servers:
+                - url: "http://127.0.0.1:9091"
+
+          prometheus-svc:
+            loadBalancer:
+              servers:
+                - url: "http://127.0.0.1:8082"
+
+          wg-easy-svc:
+            loadBalancer:
+              servers:
+                - url: "http://127.0.0.1:51821"
+
+        middlewares:
+          # IP allowlist: only WireGuard VPN subnet permitted
+          wg-allowlist:
+            ipAllowList:
+              sourceRange:
+                - "10.0.0.0/24"
+
+          # Authelia forwardAuth: delegates all authentication to Authelia
+          authelia-forward-auth:
+            forwardAuth:
+              address: "http://127.0.0.1:9091/api/authz/forward-auth"
+              trustForwardHeader: true
+              authResponseHeaders:
+                - "Remote-User"
+                - "Remote-Groups"
+                - "Remote-Name"
+                - "Remote-Email"
+
+          # Admin middleware chain: IP check first, then Authelia
+          admin-chain:
+            chain:
+              middlewares:
+                - wg-allowlist
+                - authelia-forward-auth
+
+          # Global security headers applied to all admin routes
+          # Applications should add their own CSP — see app-integration-guide.md Section 6
+          global-security-headers:
+            headers:
+              stsSeconds: 31536000
+              stsIncludeSubdomains: true
+              stsPreload: false
+              forceSTSHeader: true
+              frameDeny: true
+              contentTypeNosniff: true
+              referrerPolicy: "strict-origin-when-cross-origin"
+              permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+
+      tls:
+        options:
+          default:
+            minVersion: VersionTLS12
+            sniStrict: true
+
+  # -----------------------------------------------------------
+  # Traefik Dynamic Configuration: Cockpit
+  # -----------------------------------------------------------
+  - path: /etc/traefik/config/cockpit.yaml
+    owner: traefik:traefik
+    permissions: "0644"
+    content: |
+      http:
+        routers:
+          cockpit:
+            rule: "Host(`cockpit.${DOMAIN}`)"
+            entryPoints:
+              - websecure
+            service: cockpit-svc
+            middlewares:
+              - admin-chain
+            tls:
+              certResolver: cloudflare
+
+        services:
+          cockpit-svc:
+            loadBalancer:
+              passHostHeader: true   # Required for Cockpit WebSocket support
+              servers:
+                - url: "http://127.0.0.1:9090"
+
+  # -----------------------------------------------------------
+  # Cloudflare Token Environment File (overwritten by runcmd via Vault)
+  # -----------------------------------------------------------
+  - path: /etc/traefik/env
+    owner: traefik:traefik
+    permissions: "0600"
+    content: |
+      CF_DNS_API_TOKEN=<<INJECT_AT_DEPLOYMENT>>
+
+  # -----------------------------------------------------------
+  # Logrotate for Traefik
+  # -----------------------------------------------------------
+  - path: /etc/logrotate.d/traefik
+    owner: root:root
+    permissions: "0644"
+    content: |
+      /var/log/traefik/access.log {
+          daily
+          rotate 14
+          compress
+          missingok
+          notifempty
+          create 0640 traefik traefik
+          postrotate
+              systemctl reload traefik.service > /dev/null 2>&1 || true
+          endscript
+      }
+
+  # -----------------------------------------------------------
+  # Authelia Configuration Template
+  # Copied to /data/authelia/config/ on first boot only.
+  # Subsequent redeploys use the persisted copy from block volume.
+  # -----------------------------------------------------------
+  - path: /etc/authelia/configuration.yml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      server:
+        address: 'tcp://0.0.0.0:9091/'
+
+      log:
+        level: info
+        format: json
+
+      totp:
+        issuer: ${DOMAIN}
+        period: 30
+        skew: 1
+
+      authentication_backend:
+        file:
+          path: /config/users_database.yaml
+          password:
+            algorithm: argon2
+            argon2:
+              variant: argon2id
+              iterations: 3
+              memory: 65536
+              parallelism: 4
+              key_length: 32
+              salt_length: 16
+
+      access_control:
+        default_policy: deny
+        rules:
+          # Authelia portal itself must be reachable without auth (avoids circular redirect)
+          - domain: auth.${DOMAIN}
+            policy: bypass
+          # Metrics is read-only; 1FA sufficient
+          - domain: metrics.${DOMAIN}
+            policy: one_factor
+          # All management surfaces require 2FA
+          - domain:
+              - traefik.${DOMAIN}
+              - cockpit.${DOMAIN}
+              - wg.${DOMAIN}
+            policy: two_factor
+
+      session:
+        cookies:
+          - domain: ${DOMAIN}
+            authelia_url: https://auth.${DOMAIN}
+            name: authelia_session
+            same_site: lax
+            inactivity: 5m
+            expiration: 1h
+            remember_me: 1w
+
+      storage:
+        local:
+          path: /data/db.sqlite3
+
+      notifier:
+        filesystem:
+          filename: /data/notifications.txt
+
+      # Secrets (jwt_secret, session.secret) are injected via environment
+      # variables in /data/authelia/env — generated on first boot
+
+  # -----------------------------------------------------------
+  # Traefik Systemd Service (Hardened)
+  # -----------------------------------------------------------
+  - path: /etc/systemd/system/traefik.service
+    content: |
+      [Unit]
+      Description=Traefik Edge Router
+      After=network-online.target local-fs.target
+      Wants=network-online.target
+      Requires=local-fs.target
+
+      [Service]
+      Type=simple
+      User=traefik
+      Group=traefik
+
+      # Security: Minimal capabilities for binding ports 80/443
+      AmbientCapabilities=CAP_NET_BIND_SERVICE
+      CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+      NoNewPrivileges=true
+      ProtectSystem=strict
+      ProtectHome=true
+      PrivateTmp=true
+      ProtectKernelModules=true
+      ProtectKernelTunables=true
+      RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+      SystemCallFilter=@system-service
+
+      # /var/log/traefik is a symlink to /data/logs/traefik (block volume)
+      ReadWritePaths=/data/traefik/letsencrypt /data/logs/traefik
+      EnvironmentFile=/etc/traefik/env
+      ExecStart=/usr/local/bin/traefik --configFile=/etc/traefik/traefik.yaml
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # -----------------------------------------------------------
+  # Authelia Systemd Service
+  # Runs as a system-level Podman container (root-owned service unit).
+  # Data persists on block volume; config is read from /data/authelia/
+  # -----------------------------------------------------------
+  - path: /etc/systemd/system/authelia.service
+    content: |
+      [Unit]
+      Description=Authelia SSO and MFA Gateway
+      After=network-online.target local-fs.target
+      Wants=network-online.target
+      Requires=local-fs.target
+
+      [Service]
+      Type=simple
+      Restart=always
+      ExecStartPre=-/usr/bin/podman rm -f authelia
+      ExecStart=/usr/bin/podman run --rm \
+        --name authelia \
+        --env-file /data/authelia/env \
+        -p 127.0.0.1:9091:9091 \
+        -v /data/authelia/config:/config:Z \
+        -v /data/authelia/db:/data:Z \
+        authelia/authelia:4.39 \
+        authelia --config /config/configuration.yml
+
+      [Install]
+      WantedBy=multi-user.target
+
+  # -----------------------------------------------------------
+  # wg-easy Systemd Service
+  # wg-easy manages WireGuard entirely; keys persist on block volume
+  # -----------------------------------------------------------
+  - path: /etc/systemd/system/wg-easy.service
+    content: |
+      [Unit]
+      Description=WireGuard Easy Management UI
+      After=network-online.target local-fs.target
+      Wants=network-online.target
+      Requires=local-fs.target
+
+      [Service]
+      Type=simple
+      Restart=always
+      ExecStartPre=-/usr/bin/podman rm -f wg-easy
+      ExecStart=/usr/bin/podman run --rm \
+        --name wg-easy \
+        --cap-add NET_ADMIN \
+        --cap-add SYS_MODULE \
+        --sysctl net.ipv4.ip_forward=1 \
+        --device /dev/net/tun \
+        -p 51820:51820/udp \
+        -p 127.0.0.1:51821:51821/tcp \
+        -v /data/containers/wg-easy:/etc/wireguard:Z \
+        --env-file /data/containers/wg-easy/env \
+        ghcr.io/wg-easy/wg-easy:15
+
+      [Install]
+      WantedBy=multi-user.target
+
+# ======================= RUN COMMANDS =========================
+runcmd:
+  # -----------------------------------------------------------
+  # Boot Volume Expansion
+  # OCI instances are provisioned with a base image that may not
+  # use all available boot volume space. oci-growfs expands the
+  # root filesystem to the full boot volume size.
+  # oci-utils is typically pre-installed on OCI Oracle Linux images
+  # but installed here if missing to ensure idempotency.
+  # -----------------------------------------------------------
+  - |
+    dnf install -y oci-utils || true
+    oci-growfs -y || true
+
+  # -----------------------------------------------------------
+  # Block Storage Setup
+  # Idempotent: formats only if no filesystem found.
+  # Mounted at /data — the persistent layer for this entire stack.
+  #
+  # Device path: /dev/oracleoci/oraclevdb is the default for OCI
+  # paravirtualized volumes, but the path can vary by attachment
+  # or instance shape. The script probes all known paths in order
+  # and uses the first one found. Mounted by UUID in fstab so the
+  # mount remains stable even if the device path changes on reboot.
+  # -----------------------------------------------------------
+  - |
+    BLOCK_DEV=""
+    for dev in /dev/oracleoci/oraclevdb /dev/sdb /dev/vdb; do
+      [ -b "$dev" ] && BLOCK_DEV="$dev" && break
+    done
+
+    if [ -n "$BLOCK_DEV" ]; then
+      if ! blkid "$BLOCK_DEV" | grep -q TYPE; then
+        mkfs.xfs "$BLOCK_DEV"
+        echo "Formatted $BLOCK_DEV as XFS"
+      fi
+      mkdir -p /data
+      UUID=$(blkid -s UUID -o value "$BLOCK_DEV")
+      if ! grep -q "UUID=$UUID" /etc/fstab; then
+        echo "UUID=$UUID /data xfs defaults,noatime 0 2" >> /etc/fstab
+      fi
+      mount /data || true
+    else
+      echo "WARNING: No block device found — persistent storage unavailable"
+    fi
+
+  # -----------------------------------------------------------
+  # Persistent Directory Structure on Block Volume
+  #
+  # Traefik, Authelia, and WireGuard configuration files
+  # Quadlet unit files for Podman app containers
+  # -----------------------------------------------------------
+  - |
+    mkdir -p \
+      /data/traefik/letsencrypt \
+      /data/authelia/config \
+      /data/authelia/db \
+      /data/logs/traefik \
+      /data/logs/authelia \
+      /data/containers/wg-easy \
+      /data/apps \
+      /etc/containers/systemd   # Quadlet unit files for app containers
+
+  # -----------------------------------------------------------
+  # Symlinks: OS Paths → Persistent Storage
+  # Ensures all services write to the block volume transparently
+  # -----------------------------------------------------------
+  - |
+    rm -rf /etc/traefik/letsencrypt
+    ln -sfn /data/traefik/letsencrypt /etc/traefik/letsencrypt
+
+    rm -rf /var/log/traefik
+    ln -sfn /data/logs/traefik /var/log/traefik
+
+  # -----------------------------------------------------------
+  # Traefik Configuration Directories & Ownership
+  # -----------------------------------------------------------
+  - |
+    mkdir -p /etc/traefik/config
+    chown -R traefik:traefik /etc/traefik
+    chown -R traefik:traefik /data/traefik /data/logs/traefik
+    chmod 700 /data/traefik/letsencrypt
+
+  # -----------------------------------------------------------
+  # Container Tools (DNF Module) & Image Pull
+  # Images pulled here so Authelia bootstrap (below) can use them
+  #
+  # Podman and buildah are required, skopeo for image inspection,
+  # podman-compose is intentionally omitted — it exists only for Docker Compose
+  # compatibility. This stack uses Quadlet (native systemd-integrated Podman)
+  # for container management, which requires no compatibility layer.
+  # -----------------------------------------------------------
+  - |
+    dnf module enable -y container-tools:ol9 || dnf module enable -y container-tools
+    dnf install -y podman buildah skopeo
+    podman pull authelia/authelia:4.39
+    podman pull ghcr.io/wg-easy/wg-easy:15
+
+  # -----------------------------------------------------------
+  # Fetch Secrets from OCI Vault (Instance Principal auth)
+  # -----------------------------------------------------------
+  - |
+    dnf install -y oci-cli
+
+    CF_TOKEN=$(oci secrets secret-bundle get \
+      --secret-id ${CF_SECRET_OCID} \
+      --query "data.secretBundleContent.content" \
+      --raw-output | base64 -d)
+
+    AUTHELIA_ADMIN_PASS=$(oci secrets secret-bundle get \
+      --secret-id ${AUTH_SECRET_OCID} \
+      --query "data.secretBundleContent.content" \
+      --raw-output | base64 -d)
+
+    WG_ADMIN_PASS=$(oci secrets secret-bundle get \
+      --secret-id ${WG_SECRET_OCID} \
+      --query "data.secretBundleContent.content" \
+      --raw-output | base64 -d)
+
+    echo "CF_DNS_API_TOKEN=$CF_TOKEN" > /etc/traefik/env
+    chown traefik:traefik /etc/traefik/env
+    chmod 600 /etc/traefik/env
+
+    # Write passwords to ephemeral tmpfs for use in bootstrap blocks below.
+    # /run is in-memory only — never touches disk or block volume.
+    echo "$AUTHELIA_ADMIN_PASS" > /run/authelia-bootstrap.tmp
+    chmod 600 /run/authelia-bootstrap.tmp
+    echo "$WG_ADMIN_PASS" > /run/wg-bootstrap.tmp
+    chmod 600 /run/wg-bootstrap.tmp
+
+  # -----------------------------------------------------------
+  # Authelia First-Run Bootstrap
+  # All steps are idempotent — skipped on redeploy if data exists
+  # -----------------------------------------------------------
+  - |
+    # Generate and persist secrets on first run only
+    if [ ! -f /data/authelia/env ]; then
+      JWT_SECRET=$(openssl rand -hex 32)
+      SESSION_SECRET=$(openssl rand -hex 32)
+      {
+        echo "AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${JWT_SECRET}"
+        echo "AUTHELIA_SESSION_SECRET=${SESSION_SECRET}"
+      } > /data/authelia/env
+      chmod 600 /data/authelia/env
+    fi
+
+    # Copy configuration template on first run only
+    if [ ! -f /data/authelia/config/configuration.yml ]; then
+      cp /etc/authelia/configuration.yml /data/authelia/config/configuration.yml
+      chmod 600 /data/authelia/config/configuration.yml
+    fi
+
+    # Bootstrap admin user if no users database exists
+    if [ ! -f /data/authelia/config/users_database.yaml ]; then
+      AUTHELIA_ADMIN_PASS=$(cat /run/authelia-bootstrap.tmp)
+      PASS_HASH=$(podman run --rm authelia/authelia:4.39 \
+        authelia crypto hash generate argon2 --password "$AUTHELIA_ADMIN_PASS" \
+        | grep 'Digest:' | awk '{print $2}')
+      rm -f /run/authelia-bootstrap.tmp
+      {
+        echo "users:"
+        echo "  admin:"
+        echo "    displayname: \"Admin\""
+        echo "    password: \"${PASS_HASH}\""
+        echo "    email: ${ADMIN_EMAIL}"
+        echo "    groups:"
+        echo "      - admins"
+      } > /data/authelia/config/users_database.yaml
+      chmod 600 /data/authelia/config/users_database.yaml
+    fi
+
+    chown -R root:root /data/authelia
+
+  # -----------------------------------------------------------
+  # wg-easy Environment File (first run only)
+  # Uses wg-easy v15 unattended setup env vars.
+  # INIT_* variables are only processed on first container start.
+  # INIT_IPV4_CIDR and INIT_IPV6_CIDR must be set together (v15 group 3 rule).
+  # INIT_IPV6_CIDR uses a private ULA prefix for the WireGuard tunnel network —
+  #   independent of whether the OCI VNIC has a public IPv6 address assigned.
+  # INSECURE=true is required when running behind Traefik (TLS handled upstream).
+  # Public IP fetched from OCI instance metadata.
+  # -----------------------------------------------------------
+  - |
+    if [ ! -f /data/containers/wg-easy/env ]; then
+      PUBLIC_IP=$(curl -s http://169.254.169.254/opc/v1/vnics/ \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)[0].get('publicIp',''))" 2>/dev/null)
+      WG_ADMIN_PASS=$(cat /run/wg-bootstrap.tmp)
+      {
+        echo "PORT=51821"
+        echo "INSECURE=true"
+        echo "INIT_ENABLED=true"
+        echo "INIT_USERNAME=admin"
+        echo "INIT_PASSWORD=${WG_ADMIN_PASS}"
+        echo "INIT_HOST=${PUBLIC_IP}"
+        echo "INIT_PORT=51820"
+        echo "INIT_DNS=1.1.1.1"
+        echo "INIT_IPV4_CIDR=10.0.0.0/24"
+        echo "INIT_IPV6_CIDR=fd00::/64"
+        echo "INIT_ALLOWED_IPS=0.0.0.0/0,::/0"
+      } > /data/containers/wg-easy/env
+      chmod 600 /data/containers/wg-easy/env
+    fi
+    # Always clean up — tmpfs file must not persist regardless of whether
+    # the env file was newly created or already existed from a prior deploy
+    rm -f /run/wg-bootstrap.tmp
+
+  # -----------------------------------------------------------
+  # SELinux File Contexts
+  # Uses -m (modify) if context already exists, -a (add) if not
+  # -----------------------------------------------------------
+  - |
+    semanage_fcontext() {
+      semanage fcontext -m "$@" 2>/dev/null || semanage fcontext -a "$@"
+    }
+    semanage_fcontext -t bin_t "/usr/local/bin/traefik"
+    semanage_fcontext -t etc_t "/etc/traefik(/.*)?"
+    semanage_fcontext -t var_log_t "/data/logs/traefik(/.*)?"
+    restorecon -Rv /usr/local/bin/ /etc/traefik/ /data/logs/traefik/
+    semanage port -a -t http_port_t -p tcp 8082 2>/dev/null || \
+    semanage port -m -t http_port_t -p tcp 8082
+
+  # -----------------------------------------------------------
+  # System Hardening
+  # -----------------------------------------------------------
+  - |
+    setenforce 1
+    sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+    systemctl enable --now auditd
+
+  # -----------------------------------------------------------
+  # Traefik Binary (architecture-aware)
+  # -----------------------------------------------------------
+  - |
+    ARCH=$(uname -m)
+    case "$ARCH" in
+      x86_64)  TRAEFIK_ARCH="amd64" ;;
+      aarch64) TRAEFIK_ARCH="arm64" ;;
+      *)       echo "Unsupported architecture: $ARCH"; exit 1 ;;
+    esac
+    TRAEFIK_VERSION="v3.7.1"
+    curl -fsSL "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${TRAEFIK_ARCH}.tar.gz" \
+      | tar -xz -C /usr/local/bin/ traefik
+    chown root:root /usr/local/bin/traefik
+    chmod 755 /usr/local/bin/traefik
+
+  # -----------------------------------------------------------
+  # IP Forwarding (required on host for wg-easy container)
+  # -----------------------------------------------------------
+  - echo "net.ipv4.ip_forward=1" > /etc/sysctl.d/99-wireguard.conf
+  - sysctl -p /etc/sysctl.d/99-wireguard.conf
+
+  # -----------------------------------------------------------
+  # Persistent Journal Logging
+  # -----------------------------------------------------------
+  - |
+    mkdir -p /var/log/journal
+    systemd-tmpfiles --create --prefix /var/log/journal
+    systemctl restart systemd-journald
+
+  # -----------------------------------------------------------
+  # Firewall Rules
+  # Port 8082 (metrics) intentionally omitted — internal only
+  # -----------------------------------------------------------
+  - |
+    firewall-cmd --permanent --add-service={http,https}
+    firewall-cmd --permanent --add-port=51820/udp
+    firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="10.0.0.0/24" service name="cockpit" accept'
+    firewall-cmd --reload
+
+  # -----------------------------------------------------------
+  # Start Services
+  # -----------------------------------------------------------
+  - systemctl daemon-reload
+  - systemctl enable --now cockpit.socket traefik.service authelia.service wg-easy.service pmcd.service pmlogger.service
+
+  # -----------------------------------------------------------
+  # Replay Application Deployment Manifests
+  # Reconstructs Quadlet and Traefik configs for all apps registered
+  # via deploy-service.sh and stored on the block volume.
+  # Skipped silently on clean first boot (no manifests yet).
+  # See app-integration-guide.md Section 15.2 for details.
+  # -----------------------------------------------------------
+  - |
+    if [ -d /data/apps ] && ls /data/apps/*.sh 2>/dev/null | grep -q .; then
+      for manifest in /data/apps/*.sh; do
+        echo "Replaying manifest: ${manifest}"
+        bash "${manifest}" || echo "WARNING: manifest failed: ${manifest}"
+      done
+      systemctl daemon-reload
+    fi
+
+  # -----------------------------------------------------------
+  # Final Message
+  # -----------------------------------------------------------
+  - |
+    echo "Cloud-init execution complete. System is locked down and routing."
+    echo "Stack: Traefik, Authelia, Cockpit, wg-easy running."
