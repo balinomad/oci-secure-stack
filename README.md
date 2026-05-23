@@ -1,4 +1,4 @@
-# oracle-cloud-init: An Opinionated Admin Stack
+# oracle-cloud-init: A Secure Admin Stack
 
 A production-ready, cloud-init-based provisioning template for Oracle Cloud Infrastructure (OCI) that deploys a hardened admin stack on Oracle Linux 9.
 
