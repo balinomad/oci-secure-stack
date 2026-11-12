@@ -19,7 +19,7 @@ Project-defining material lives outside this directory:
 - Architecture and component documentation: `docs/architecture.md`, `docs/components/`
 - Operator guides: `docs/guides/`
 
-Baseline: commit `7fbb538` plus uncommitted working tree changes.\
+Baseline: commit `4a0a2ff`.\
 Method: static analysis of repository files. No OCI deployment has been executed.
 
 ## Document map

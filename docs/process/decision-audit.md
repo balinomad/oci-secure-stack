@@ -15,11 +15,11 @@ The decisions themselves belong in `docs/decisions/` as tracked ADRs. This docum
 
 ## Authority hierarchy today
 
-Draft ADRs now exist under `docs/decisions/`, but none is committed or confirmed. No decision is formally authoritative yet.
+Draft ADRs now exist under `docs/decisions/` and are committed in `4a0a2ff`, but none is confirmed. No decision is formally authoritative yet.
 
 Current effective order, from strongest to weakest:
 
-1. `docs/decisions/*.md`: draft ADRs, not confirmed or committed
+1. `docs/decisions/*.md`: draft ADRs, committed in `4a0a2ff`, not confirmed
 2. `docs/process/component-research.md`: research evidence behind the draft ADRs
 3. `docs/process/archive/work-plan.md`: historical plan, superseded
 4. `docs/legacy/*.md`: substantive but partly superseded

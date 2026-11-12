@@ -57,8 +57,8 @@ Gate GA: every goal has an owner, a testable criterion, and no unresolved contra
 
 ## Phase B: Repository recovery (0.5 day)
 
-- [x] B1 Move research and planning out of the ignored `docs/tmp/` into tracked paths. (moved 2026-11-12; commit pending)
-- [ ] B2 Resolve the uncommitted deletion and `.gitignore` change in one commit.
+- [x] B1 Move research and planning out of the ignored `docs/tmp/` into tracked paths. (moved 2026-11-12; commit `4a0a2ff`)
+- [x] B2 Resolve the uncommitted deletion and `.gitignore` change in one commit. (commit `4a0a2ff`)
 - [ ] B3 Tag `v0.1.0-pre-resume`.
 - [ ] B4 Create branch `work/decision-baseline`.
 - [ ] B5 Add a `docs/process/` revision log entry.

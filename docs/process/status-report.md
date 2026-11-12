@@ -9,7 +9,8 @@ updated: 2026-11-12
 
 # Status Report
 
-Baseline: commit `7fbb538`, 2026-09-04, plus uncommitted working tree changes Method: static analysis. No OCI deployment has been executed.
+Baseline: commit `4a0a2ff`, 2026-11-12.\
+Method: static analysis of repository files. No OCI deployment has been executed.
 
 ## Verdict
 
@@ -19,7 +20,7 @@ The project is not close to a deployable v1, but most of the design thinking exi
 - The implementation layer is a single 771-line cloud-init template plus two scripts. Neither has deployment evidence.
 - The current repository structure is mostly empty placeholders.
 - Strategic decisions and implementation contradict each other in at least six places.
-- Goals exist only as a draft contract, and decision records are not tracked in git.
+- Goals exist only as a draft contract. Decision records are tracked but not confirmed.
 
 The only executable artifact is `infra/cloud-init/cloud-config.example.yaml`. Until it is tested, it is also the only source of ground truth about behaviour, which is the opposite of the intended governance model.
 
@@ -46,10 +47,10 @@ This report covers the project defined in `docs/goals.md`. It records repository
 ## Git state
 
 - Branch `master` tracks `origin/master`, remote `github.com/balinomad/oci-secure-stack`.
-- Last commit: `7fbb538`, 2026-09-04. The project has been dormant for about ten weeks.
-- Working tree: `.gitignore` modified, `docs/work-plan.md` deleted but still tracked at HEAD.
+- Last recovery commit: `4a0a2ff`, 2026-11-12. The recovery commit includes the documentation tree.
+- Working tree: clean after `4a0a2ff`.
 - The research and planning files were moved out of `docs/tmp/` on 2026-11-12 to `docs/process/component-research.md` and `docs/process/archive/work-plan.md`.
-- They are no longer ignored by `.gitignore:31`, but they remain untracked until the next commit. The clean-clone risk is not cleared until that commit.
+- They are tracked in `4a0a2ff`; the clean-clone risk is cleared.
 
 ## Documentation status
 
