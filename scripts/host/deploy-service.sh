@@ -211,7 +211,7 @@ echo "Traefik will pick up ${TRAEFIK_FILE} within seconds."
 echo "Verify: systemctl status ${NAME}"
 
 # Save deployment manifest to /data/apps/ so this service is automatically
-# reconstructed on VM replacement (see app-integration-guide.md Section 15.2)
+# reconstructed on VM replacement (see docs/guides/adding-apps.md section 14.2)
 MANIFEST_DIR="/data/apps"
 MANIFEST_FILE="${MANIFEST_DIR}/${NAME}.sh"
 
