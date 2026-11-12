@@ -31,5 +31,5 @@ The VM root filesystem is treated as disposable, but persistent state must survi
 
 ## References
 
-- `docs/process/component-research.md`
-- `docs/process/findings-register.md` F2, F3
+- `tmp/unverified/component-research.md`
+- `docs/process/issue-log.md` F2, F3

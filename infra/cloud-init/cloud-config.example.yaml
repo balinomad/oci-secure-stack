@@ -18,7 +18,7 @@
 #   4. Use cloud-config.yaml as instance user data
 #   5. Do not commit .env or cloud-config.yaml to version control
 #
-# See stack-guide.md Section 6 for full deployment instructions.
+# See docs/guides/getting-started.md for full deployment instructions.
 #
 # ==============================================================
 # PREREQUISITES (must exist before launching the instance):
@@ -37,7 +37,7 @@
 #   - Secret name: traefik-cloudflare-token  → Cloudflare DNS API token
 #   - Secret name: authelia-admin-password   → Authelia admin password
 #   - Secret name: wg-easy-admin-password    → wg-easy admin password
-#   See stack-guide.md Section 7 for setup steps.
+#   See docs/guides/getting-started.md section 4 for setup steps.
 #
 #   Cloudflare DNS (all records must exist before first boot):
 #   - auth.${DOMAIN}     A  <instance public IP>  DNS Only
@@ -46,7 +46,7 @@
 #   - cockpit.${DOMAIN}  A  <instance public IP>  DNS Only
 #   - wg.${DOMAIN}       A  <instance public IP>  DNS Only
 #   Admin subdomains must be DNS Only (grey cloud), not proxied.
-#   See stack-guide.md Section 8 for full DNS setup.
+#   See docs/guides/getting-started.md section 5 for full DNS setup.
 #
 # NOTE: 10.0.0.x in the wg-easy config is correct wg-easy syntax,
 #       not a template placeholder.
@@ -230,7 +230,7 @@ write_files:
                 - authelia-forward-auth
 
           # Global security headers applied to all admin routes
-          # Applications should add their own CSP — see app-integration-guide.md Section 6
+          # Applications should add their own CSP — see docs/guides/adding-apps.md section 5
           global-security-headers:
             headers:
               stsSeconds: 31536000
@@ -752,7 +752,7 @@ runcmd:
   # Reconstructs Quadlet and Traefik configs for all apps registered
   # via deploy-service.sh and stored on the block volume.
   # Skipped silently on clean first boot (no manifests yet).
-  # See app-integration-guide.md Section 15.2 for details.
+  # See docs/guides/adding-apps.md section 14.2 for details.
   # -----------------------------------------------------------
   - |
     if [ -d /data/apps ] && ls /data/apps/*.sh 2>/dev/null | grep -q .; then

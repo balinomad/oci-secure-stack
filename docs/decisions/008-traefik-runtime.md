@@ -30,5 +30,5 @@ The edge router binds privileged ports 80 and 443. A rootless container would re
 
 ## References
 
-- `docs/process/component-research.md`
+- `tmp/unverified/component-research.md`
 - `docs/decisions/001-exposure-model.md`

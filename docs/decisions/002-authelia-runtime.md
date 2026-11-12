@@ -33,5 +33,5 @@ Authelia holds session keys, TOTP secrets, and the user database. Running it as 
 
 ## References
 
-- `docs/process/component-research.md`
-- `docs/process/findings-register.md` F1
+- `tmp/unverified/component-research.md`
+- `docs/process/issue-log.md` F1

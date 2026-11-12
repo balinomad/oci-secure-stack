@@ -1,7 +1,7 @@
 ---
 name: "Document Conventions"
 description: |
-  Working conventions for project documents, including status, version numbering, commit behavior, and per-document independence.
+  Working conventions for project documents, including status, version numbering, commit behavior, placement, and per-document independence.
 status: active
 version: 1.0
 updated: 2026-11-12
@@ -61,38 +61,44 @@ A document is final for the current release when all of these are true:
 1. It is committed to git.
 2. It has valid frontmatter and the assigned version.
 3. Its owner has confirmed its content.
-4. It has no unresolved contradiction with the decision audit or findings register.
+4. It has no unresolved contradiction with the decision record or findings.
 5. Every behavioural claim is supported by execution evidence or a direct artifact.
 6. It is not marked superseded.
 
 Final does not mean immutable. A later change creates a new version.
 
-Project v1.0 completion criteria are defined in `docs/goals.md`.
+The project owner is the repository maintainer. The maintainer confirms document content and decision records.
+
+Project completion criteria are defined in `docs/architecture.md`.
 
 ## Documentation layers
+
+### Repository files
+
+`README.md` is the front door. `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE`, and `CHANGELOG.md` are required for a public repository. They are repository policy and metadata files, not core project documentation. Keep them at the repository root and link to the project documentation instead of duplicating it.
 
 ### Project documentation
 
 Normative and durable. Describes what the project is and how it must behave.
 
-| Path                      | Content                                                                                  |
-| ------------------------- | ---------------------------------------------------------------------------------------- |
-| `docs/goals.md`           | Purpose, goals, success criteria, non-goals, constraints, priorities, definition of done |
-| `docs/principles.md`      | Project principles                                                                       |
-| `docs/decisions/`         | Architecture decision records                                                            |
-| `docs/architecture.md`    | High-level architecture                                                                  |
-| `docs/components/`        | Component specifications                                                                 |
-| `docs/prerequisites.md`   | Provisioning prerequisites                                                               |
-| `docs/getting-started.md` | Deployment walkthrough                                                                   |
-| `docs/guides/`            | Stable operator procedures                                                               |
+| Path                                     | Content                                                                                 |
+| ---------------------------------------- | --------------------------------------------------------------------------------------- |
+| `docs/architecture.md`                   | Purpose, goals, success criteria, constraints, principles, architecture, security model |
+| `docs/decisions/`                        | Architecture decision records                                                           |
+| `docs/guides/getting-started.md`         | Deployment walkthrough                                                                  |
+| `docs/guides/operations.md`              | Verification, maintenance, recovery, and troubleshooting                                |
+| `docs/guides/adding-apps.md`             | Application integration contract                                                        |
+| `docs/reference/infrastructure.md`       | Exact infrastructure values and host baseline                                           |
+| `docs/reference/traefik.md`              | Exact Traefik configuration and maintenance                                             |
+| `docs/reference/application-manifest.md` | Exact application manifest format                                                       |
 
 ### Process documentation
 
 Retrospective and operational. Describes what happened, what is broken, and how work proceeds.
 
-| Path            | Content                                                                    |
-| --------------- | -------------------------------------------------------------------------- |
-| `docs/process/` | Status reports, findings, audits, plans, checklists, conventions, evidence |
+| Path            | Content                                                                  |
+| --------------- | ------------------------------------------------------------------------ |
+| `docs/process/` | Status, issue log, plans, acceptance criteria, conventions, and evidence |
 
 ### Placement test
 
@@ -103,17 +109,23 @@ Ask one question:
 
 A document must not mix the two roles. Evidence and status markers do not belong in project documentation. Normative rules do not belong in a status report.
 
-### Operational checklists
+### Operational procedures
 
-Acceptance and tracking checklists stay in `docs/process/` while they track work. When a checklist becomes a stable operator procedure, move it to `docs/guides/` and update its frontmatter.
+Stable procedures belong in `docs/guides/`. A checklist that tracks a one-time deployment belongs in `docs/process/`. When the checklist becomes a reusable operator procedure, move it to `docs/guides/` and update its frontmatter.
 
 ### Decision records
 
-Architecture decision records belong in `docs/decisions/`. Audits of decisions belong in `docs/process/`. An audit does not replace the decision record.
+Architecture decision records belong in `docs/decisions/`.
+
+An unassigned decision question may be listed in the open decision questions table in `docs/decisions/decision-index.md`. When a draft decision file is created, move the question into that file and remove the table row. Do not keep the question in both places.
+
+### Legacy documents
+
+Legacy source documents are migrated into the project or process layers and then deleted. Do not retain a parallel legacy tree. Record historical provenance in the decision record or issue log that uses it, not in a temporary file.
 
 ## Frontmatter
 
-Every Markdown file under `docs/` has frontmatter, including legacy documents and empty placeholders.
+Every Markdown file under `docs/` has frontmatter.
 
 Canonical field order:
 

@@ -11,7 +11,7 @@ updated: 2026-11-12
 
 ## Context
 
-A full Prometheus server, TSDB, and Alertmanager are redundant for an Always Free instance. PCP is available on Oracle Linux 9 and can expose a Prometheus-compatible endpoint. The current implementation routes metrics through Traefik, which finding F8 records as incorrect.
+A full Prometheus server, TSDB, and Alertmanager are redundant for an instance that fits within the Oracle Cloud Free Tier Always Free services limits. PCP is available on Oracle Linux 9 and can expose a Prometheus-compatible endpoint. The current implementation routes metrics through Traefik, which finding F8 records as incorrect.
 
 ## Decision
 
@@ -27,9 +27,9 @@ A full Prometheus server, TSDB, and Alertmanager are redundant for an Always Fre
 - The stack has no long-term Prometheus TSDB and no built-in alerting.
 - Operators use PCP tooling or an SSH tunnel for metrics access.
 - The metrics route in the current cloud-init configuration must be removed.
-- This decision supersedes the metrics routing proposal in Section 2 of `docs/process/component-research.md`.
+- This decision supersedes the metrics routing proposal in Section 2 of `tmp/unverified/component-research.md`.
 
 ## References
 
-- `docs/process/component-research.md`
-- `docs/process/findings-register.md` F8
+- `tmp/unverified/component-research.md`
+- `docs/process/issue-log.md` F8

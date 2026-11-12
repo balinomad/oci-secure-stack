@@ -25,12 +25,12 @@ The current deployment path runs services as `opc`, writes environment values in
 
 ## Consequences
 
-- `deploy-service.sh` must validate volume sources and secret handling.
+- `scripts/host/deploy-service.sh` must validate volume sources and secret handling.
 - F11, F12, and F13 are addressed by the new contract. Implementation and deployment verification remain.
 - Application onboarding requires a dedicated user and a Quadlet unit.
 - Secret rotation must update the secret store, not rewrite a manifest.
 
 ## References
 
-- `docs/process/component-research.md`
-- `docs/process/findings-register.md` F11, F12, F13
+- `tmp/unverified/component-research.md`
+- `docs/process/issue-log.md` F11, F12, F13

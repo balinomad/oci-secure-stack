@@ -1,5 +1,5 @@
 ---
-name: "Resumption Plan"
+name: "OCI Secure Stack Delivery Plan"
 description: |
   Decision-first plan for resuming work, with phases, tasks, gates, estimates, and immediate next actions.
 status: active
@@ -7,7 +7,7 @@ version: 1.0
 updated: 2026-11-12
 ---
 
-# Resumption Plan
+# OCI Secure Stack Delivery Plan
 
 ## Correction to the earlier recommendation
 
@@ -40,8 +40,8 @@ The implementation remains the evidence source, but it is not the contract.
 
 Goal: make goals and decisions explicit, tracked, and coherent.
 
-- [ ] A1 Confirm or replace the draft goals in `docs/goals.md`.
-- [ ] A2 Answer the seven open questions in `decision-audit.md`.
+- [x] A1 Merge draft goals and principles into `docs/architecture.md`. Confirmation is still pending.
+- [ ] A2 Resolve the draft decisions in `docs/decisions/`.
 - [x] A3 Create `docs/decisions/` with numbered ADRs.
 - [x] A4 Write ADR-001 exposure model: dashboard, metrics, Cockpit. (draft)
 - [x] A5 Write ADR-002 Authelia runtime and file ownership model. (draft)
@@ -51,9 +51,9 @@ Goal: make goals and decisions explicit, tracked, and coherent.
 - [ ] A9 Write ADR-006 backup and recovery scope.
 - [ ] A10 Write ADR-007 OCI provisioning method: manual or Terraform.
 - [x] A10a Write ADR-008 Traefik runtime. (draft)
-- [ ] A11 Mark superseded statements in `docs/legacy/` explicitly.
+- [ ] A11 Migrate legacy documents into the project and process layers. Delete the legacy tree only after every section is verified.
 
-Gate GA: every goal has an owner, a testable criterion, and no unresolved contradiction. No implementation work starts before this gate.
+Gate GA: every goal has a named maintainer, a testable criterion, and no unresolved contradiction. No implementation work starts before this gate.
 
 ## Phase B: Repository recovery (0.5 day)
 
@@ -61,7 +61,7 @@ Gate GA: every goal has an owner, a testable criterion, and no unresolved contra
 - [x] B2 Resolve the uncommitted deletion and `.gitignore` change in one commit. (commit `4a0a2ff`)
 - [ ] B3 Tag `v0.1.0-pre-resume`.
 - [ ] B4 Create branch `work/decision-baseline`.
-- [ ] B5 Add a `docs/process/` revision log entry.
+- [x] B5 Record the consolidated documentation state in `docs/process/project-status.md`.
 
 Gate GB: clean working tree, decisions tracked, baseline tagged.
 
@@ -69,7 +69,7 @@ Gate GB: clean working tree, decisions tracked, baseline tagged.
 
 Only findings that follow from confirmed decisions are fixed here.
 
-- [ ] C1 Add `scripts/dev/validate.sh`: YAML, cloud-init schema, shellcheck, envsubst completeness.
+- [ ] C1 Add `scripts/repo/validate.sh`: YAML, cloud-init schema, shellcheck, envsubst completeness.
 - [ ] C2 F2 and F3: hard-fail when `/data` is absent or not XFS.
 - [ ] C3 F4: abort boot when a Vault secret cannot be fetched.
 - [ ] C4 F1: resolve Authelia UID and ownership; prove file access.
@@ -80,7 +80,7 @@ Only findings that follow from confirmed decisions are fixed here.
 - [ ] C9 F9: bind Cockpit to localhost and remove the direct firewall rule.
 - [ ] C10 F11 and F13: fix manifest permissions and volume validation.
 - [ ] C11 F15: verify version pins against upstream.
-- [ ] C12 F24: update stale README, `.env.example`, and `CONTRIBUTING.md` paths.
+- [x] C12 F24: update stale README, `.env.example`, and `CONTRIBUTING.md` paths.
 
 Gate GC: static validation green, every P0 finding closed or explicitly deferred with a decision reference.
 
@@ -90,19 +90,19 @@ Gate GC: static validation green, every P0 finding closed or explicitly deferred
 - [ ] D2 Deploy the rendered template and capture `cloud-init status --long` and the full log.
 - [ ] D3 Test block volume, Traefik, certificate issuance, Authelia, wg-easy, Cockpit, and the chosen metrics endpoint.
 - [ ] D4 Bootstrap the first WireGuard peer over an SSH tunnel and confirm a handshake.
-- [ ] D5 Run negative tests: no VPN gives 403, no session redirects to Authelia, HTTP gives 301, TLS is valid, no AVC denials.
+- [ ] D5 Run negative tests: no VPN gives 403, no session redirects to Authelia, and HTTP gives 301. Confirm that TLS is valid and that no AVC denials exist.
 - [ ] D6 Reboot and confirm persistence.
 - [ ] D7 Rerun cloud-init modules and confirm idempotency.
 - [ ] D8 Perform a VM replacement drill with the same block volume.
 - [ ] D9 Perform a backup and restore drill if ADR-006 includes it.
-- [ ] D10 Archive evidence under `docs/process/evidence/` or in the findings register.
+- [ ] D10 Archive evidence under `tmp/unverified/` or in the findings register.
 
-Gate GD: `verify-stack.sh` exits 0 and every item in `deployment-checklist.md` is proven.
+Gate GD: `scripts/host/verify-stack.sh` exits 0 and every item in `docs/process/acceptance-criteria.md` is proven.
 
 ## Phase E: Structural refactor (3-5 days)
 
 - [ ] E1 Extract configuration into `configs/`.
-- [ ] E2 Populate `scripts/deploy/00-06` as idempotent modules.
+- [ ] E2 Populate `scripts/host/deploy/00-06` as idempotent modules.
 - [ ] E3 Implement Makefile targets: `lint`, `render`, `deploy`, `verify`, `backup`.
 - [ ] E4 Convert infrastructure containers to Quadlet if ADR-001 or ADR-005 requires it.
 - [ ] E5 Clean-room deploy from the refactored tree.
@@ -112,14 +112,14 @@ Gate GE: parity with the Phase D baseline. No regression.
 
 ## Phase F: Documentation (3-4 days)
 
-- [ ] F1 Populate the new documentation tree using the migration map in `docs/process/legacy-migration-map.md`.
-- [ ] F2 Write prerequisites and getting started from the tested OCI steps.
-- [ ] F3 Write troubleshooting from the actual failures in Phase D.
-- [ ] F4 Update README claims and add a tested-on statement with date and version.
-- [ ] F5 Add a documentation index and a link check.
-- [ ] F6 Archive legacy documents only after every section is mapped and verified.
+- [x] F1 Consolidate the documentation tree into one front door, one design record, three guides, one reference, and one process record.
+- [x] F2 Write prerequisites and getting started from the documented OCI steps.
+- [x] F3 Write verification, maintenance, recovery, and troubleshooting into the operations runbook.
+- [x] F4 Remove unproven README claims and add a documentation map.
+- [x] F5 Make the documentation audit and link check pass. `scripts/repo/audit-docs.sh` exits 0.
+- [ ] F6 Verify every legacy section maps to a tracked document, then delete the legacy tree.
 
-Gate GF: a new operator can deploy from tracked documentation alone.
+Gate GF: a new operator can deploy from tracked documentation alone. This gate remains open until Phase D produces deployment evidence.
 
 ## Phase G: Production cutover (2-3 days)
 
@@ -150,6 +150,6 @@ Calendar time depends on OCI provisioning and DNS propagation. The plan assumes 
 
 ## Immediate next actions
 
-1. Confirm or replace the goal statement in `docs/goals.md`.
-2. Answer Q1 through Q7 in `decision-audit.md`.
+1. Confirm or replace the goals and definition of done in `docs/architecture.md`.
+2. Resolve the draft decisions in `docs/decisions/`.
 3. Track the decision material. Nothing else should start first.

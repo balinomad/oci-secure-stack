@@ -19,7 +19,7 @@ The Traefik dashboard, Traefik API, and raw metrics endpoints expose sensitive o
 2. Bind the Traefik metrics endpoint to `127.0.0.1:8082`.
 3. Do not create Traefik routes for the dashboard, API, or raw metrics.
 4. Access the dashboard through SSH local port forwarding only.
-5. Bind Cockpit to `127.0.0.1:9090` and route it through Traefik only behind Authelia with VPN and TOTP.
+5. Bind Cockpit to `127.0.0.1:9090`. Route Cockpit through Traefik only behind Authelia with VPN and TOTP.
 6. Cockpit performs its own PAM authentication. Do not trust proxy authentication headers for Cockpit sessions.
 7. Any future exposure of the management plane requires a new ADR.
 
@@ -33,5 +33,5 @@ The Traefik dashboard, Traefik API, and raw metrics endpoints expose sensitive o
 
 ## References
 
-- `docs/process/component-research.md`
-- `docs/process/findings-register.md` F6, F8, F9
+- `tmp/unverified/component-research.md`
+- `docs/process/issue-log.md` F6, F8, F9
