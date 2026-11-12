@@ -1,41 +1,32 @@
 # Security Policy
 
-## Supported Versions
+## Supported versions
 
-This repository contains infrastructure templates and scripts, not versioned software in the traditional sense. The `master` branch is always considered the current supported version.
+This repository contains infrastructure templates and scripts, not versioned software in the traditional sense. The `master` branch is the current supported version.
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
-If you discover a security vulnerability in this repository — including misconfigurations, insecure defaults, exposed secrets in template files, or incorrect security guidance in the documentation — please report it responsibly.
+If you discover a security vulnerability in this repository, report it responsibly. Examples include a misconfiguration, an insecure default, or an exposed secret in a template file. Incorrect security guidance in the documentation is also in scope.
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-### How to Report
+### How to report
 
 Open a GitHub Security Advisory using the private vulnerability reporting feature. This keeps the report confidential until a fix is available.
 
 Include as much detail as possible:
 
-- Which file(s) are affected
+- Which files are affected
 - A description of the vulnerability and its potential impact
-- Steps to reproduce or a proof of concept if applicable
-- Any suggested fix if you have one
+- Steps to reproduce or a proof of concept
+- Any suggested fix
 
-### Response Timeline
+### Response timeline
 
 - Acknowledgement within 48 hours
 - Assessment and initial response within 7 days
-- Fix or mitigation published as soon as possible depending on complexity
+- Fix or mitigation published as soon as possible, depending on complexity
 
-## Security Design Notes
+## Security design
 
-This stack is designed with the following security principles:
-
-- No credentials are embedded in the template — all secrets are fetched from OCI Vault at boot time via Instance Principal authentication
-- All admin services are restricted to the WireGuard VPN subnet via Traefik `ipAllowList` middleware
-- Authelia provides TOTP-based MFA for all admin routes
-- SELinux is enforcing on the host OS
-- Traefik runs as a dedicated non-root system user with minimal Linux capabilities
-- TLS certificates are issued automatically via Let's Encrypt; no plaintext HTTP traffic reaches any backend
-
-If you believe any of these controls are insufficient or incorrectly implemented, please report it via the process above.
+The security model, threat model, and known limitations are in [docs/architecture.md](docs/architecture.md). Report any control that is insufficient or incorrectly implemented through the process above.
