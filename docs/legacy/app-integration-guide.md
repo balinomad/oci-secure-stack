@@ -1,3 +1,12 @@
+---
+name: "Application Integration Guidelines"
+description: |
+  Guidelines for deploying application containers into the stack, including Quadlet units, Traefik routing, storage, secrets, logging, and VM replacement behavior. Legacy document retained during the documentation migration.
+status: legacy
+version: 1.0
+updated: 2026-09-04
+---
+
 # Application Integration Guidelines
 
 ## OCI Oracle Linux 9 — Secure Admin Stack

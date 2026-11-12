@@ -1,3 +1,12 @@
+---
+name: "Secure Admin Stack Guide"
+description: |
+  Architecture, deployment, operations, and security guide for the OCI Oracle Linux 9 secure admin stack. Legacy document retained during the documentation migration.
+status: legacy
+version: 1.0
+updated: 2026-09-04
+---
+
 # OCI Oracle Linux 9 — Secure Admin Stack
 
 ## Architecture & Operations Guide

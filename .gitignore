@@ -27,3 +27,5 @@ cloud-config.yaml
 *.swp
 *.swo
 *~
+
+tmp/

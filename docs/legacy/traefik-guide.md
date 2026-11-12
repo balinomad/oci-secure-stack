@@ -1,6 +1,8 @@
 ---
-project: oci-secure-stack
-name: Traefik Installation, Configuration and Maintenance Guide
+name: "Traefik Installation, Configuration and Maintenance Guide"
+description: |
+  Installation, configuration, systemd hardening, SELinux, maintenance, and troubleshooting guide for the native Traefik binary. Legacy document retained during the documentation migration.
+status: legacy
 version: 1.0
 updated: 2026-09-01
 ---

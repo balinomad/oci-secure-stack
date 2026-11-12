@@ -1,3 +1,12 @@
+---
+name: "Testing Guide"
+description: |
+  Pre-deployment validation, incremental live testing, component checks, full-stack verification, and common failure patterns for the stack. Legacy document retained during the documentation migration.
+status: legacy
+version: 1.0
+updated: 2026-09-04
+---
+
 # Testing Guide
 
 ## OCI Oracle Linux 9 — Secure Admin Stack
