@@ -1,7 +1,7 @@
 #cloud-config
 # Target: Oracle Linux 9 (UEK7)
 # Stack: Traefik, Authelia, Cockpit, WireGuard (wg-easy), Podman Quadlet,
-#        PCP, and optional Grafana/Valkey monitoring
+#        PCP, optional Grafana/Valkey monitoring, and alert delivery
 #
 # ==============================================================
 # TEMPLATE FILE — DO NOT USE DIRECTLY AS INSTANCE USER DATA
@@ -15,7 +15,7 @@
 #   3. Run:
 #        export $(cat .env | xargs)
 #        scripts/repo/render-config.sh \
-#          | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE}' \
+#          | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
 #          > cloud-config.yaml
 #   4. Use cloud-config.yaml as instance user data
 #   5. Do not commit .env or cloud-config.yaml to version control
@@ -35,12 +35,14 @@
 #   - Instance Principal IAM policy granting read on secret-family
 #     in the Vault compartment
 #
-#   OCI Vault (three mandatory secrets, one optional):
+#   OCI Vault (five mandatory secrets, one optional):
 #   - Secret name: traefik-cloudflare-token  → Cloudflare DNS API token
 #   - Secret name: authelia-admin-password   → Authelia admin password
 #   - Secret name: wg-easy-admin-password    → wg-easy admin password
 #   - Secret name: grafana-admin-password    → Grafana admin password
 #     Required when MONITORING_PROFILE is live or history.
+#   - Secret name: alert-webhook-url          → HTTPS alert webhook
+#   - Secret name: alert-heartbeat-url        → External heartbeat URL
 #   See docs/guides/getting-started.md section 4 for setup steps.
 #
 #   Monitoring profiles:
@@ -65,6 +67,7 @@
 # ======================= USERS & GROUPS =======================
 groups:
   - traefik
+  - alerting
 
 users:
   - name: traefik
@@ -76,6 +79,11 @@ users:
     system: true
     shell: /usr/sbin/nologin
     homedir: /home/authelia
+    lock_passwd: true
+  - name: alerting
+    system: true
+    shell: /usr/sbin/nologin
+    homedir: /var/lib/stack-alerting
     lock_passwd: true
 
 # ======================= PACKAGES =============================
@@ -96,6 +104,7 @@ packages:
   - policycoreutils-python-utils
   - iptables-nft # iptables compatibility on nftables (OL9)
   - curl
+  - jq
   - git
   - tar
   - gzip
@@ -168,6 +177,7 @@ runcmd:
       /data/containers/wg-easy \
       /data/monitoring/grafana \
       /data/monitoring/valkey \
+      /data/monitoring/alerting \
       /data/apps \
       /etc/containers/systemd   # Quadlet unit files for app containers
 
@@ -277,6 +287,45 @@ runcmd:
       chmod 600 /run/grafana-bootstrap.tmp
     fi
 
+    if [ -z "${ALERT_WEBHOOK_SECRET_OCID}" ] || [ -z "${ALERT_HEARTBEAT_SECRET_OCID}" ]; then
+      echo "ERROR: ALERT_WEBHOOK_SECRET_OCID and ALERT_HEARTBEAT_SECRET_OCID are required" >&2
+      exit 1
+    fi
+
+    ALERT_WEBHOOK_URL=$(oci secrets secret-bundle get \
+      --secret-id "${ALERT_WEBHOOK_SECRET_OCID}" \
+      --query "data.secretBundleContent.content" \
+      --raw-output | base64 -d)
+    ALERT_HEARTBEAT_URL=$(oci secrets secret-bundle get \
+      --secret-id "${ALERT_HEARTBEAT_SECRET_OCID}" \
+      --query "data.secretBundleContent.content" \
+      --raw-output | base64 -d)
+
+    case "${ALERT_WEBHOOK_URL}" in
+      https://*) ;;
+      *)
+        echo "ERROR: alert-webhook-url must use HTTPS" >&2
+        exit 1
+        ;;
+    esac
+
+    case "${ALERT_HEARTBEAT_URL}" in
+      https://*) ;;
+      *)
+        echo "ERROR: alert-heartbeat-url must use HTTPS" >&2
+        exit 1
+        ;;
+    esac
+
+    install -d -m 0750 -o alerting -g alerting /data/monitoring/alerting
+    umask 077
+    {
+      printf 'ALERT_WEBHOOK_URL=%q\n' "${ALERT_WEBHOOK_URL}"
+      printf 'ALERT_HEARTBEAT_URL=%q\n' "${ALERT_HEARTBEAT_URL}"
+    } > /data/monitoring/alerting/env
+    chown alerting:alerting /data/monitoring/alerting/env
+    chmod 0600 /data/monitoring/alerting/env
+
     echo "CF_DNS_API_TOKEN=$CF_TOKEN" > /etc/traefik/env
     chown traefik:traefik /etc/traefik/env
     chmod 600 /etc/traefik/env
@@ -303,6 +352,21 @@ runcmd:
     systemd-tmpfiles --create /etc/tmpfiles.d/pcp-openmetrics.conf
     systemctl restart pmcd.service pmproxy.service
     systemctl enable --now pmie.service 2>/dev/null || true
+
+    install -d -m 0750 -o alerting -g alerting /var/lib/stack-alerting
+    systemd-tmpfiles --create /etc/tmpfiles.d/pcp-alerting.conf
+    systemctl daemon-reload
+    if ! runuser -u alerting -- pmie -C -c /etc/pcp/pmie/stack-alerts.pmie; then
+      echo "ERROR: pmie rejected /etc/pcp/pmie/stack-alerts.pmie" >&2
+      exit 1
+    fi
+    if ! systemctl enable --now \
+      pcp-alert-pmie.service \
+      pcp-service-check.timer \
+      pcp-cert-check.timer \
+      pcp-heartbeat.timer; then
+      echo "WARNING: alerting services failed to start; run verify-stack.sh" >&2
+    fi
 
     if [ "${MONITORING_PROFILE}" != "none" ]; then
       dnf install -y grafana grafana-pcp
@@ -425,11 +489,12 @@ runcmd:
       semanage fcontext -m "$@" 2>/dev/null || semanage fcontext -a "$@"
     }
     semanage_fcontext -t bin_t "/usr/local/bin/traefik"
+    semanage_fcontext -t bin_t "/usr/local/libexec/stack-alerting"
     semanage_fcontext -t etc_t "/etc/traefik(/.*)?"
     semanage_fcontext -t var_log_t "/data/logs/traefik(/.*)?"
     semanage_fcontext -t var_lib_t "/data/monitoring(/.*)?"
     semanage_fcontext -t container_file_t "/data/authelia(/.*)?"
-    restorecon -Rv /usr/local/bin/ /etc/traefik/ /data/logs/traefik/ /data/authelia/ /data/monitoring/
+    restorecon -Rv /usr/local/bin/ /usr/local/libexec/ /etc/traefik/ /data/logs/traefik/ /data/authelia/ /data/monitoring/
     semanage port -a -t http_port_t -p tcp 8082 2>/dev/null || \
     semanage port -m -t http_port_t -p tcp 8082
 
@@ -507,6 +572,7 @@ runcmd:
   - systemctl daemon-reload
   - systemctl enable --now cockpit.socket traefik.service pmcd.service pmlogger.service pmproxy.service
   - systemctl enable --now pmie.service 2>/dev/null || true
+  - systemctl enable --now pcp-alert-pmie.service pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
   - systemctl restart cockpit.socket
   - systemctl enable wg-easy.service
   - |
