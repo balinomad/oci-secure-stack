@@ -2,6 +2,9 @@ api:
   dashboard: true
   insecure: false
 
+ping:
+  entryPoint: traefik
+
 metrics:
   prometheus:
     entryPoint: metrics
@@ -21,6 +24,8 @@ entryPoints:
         options: default
   metrics:
     address: "127.0.0.1:8082"   # Internal only , not exposed in firewall
+  traefik:
+    address: "127.0.0.1:8080"   # Dashboard and API, loopback only
 
 providers:
   file:

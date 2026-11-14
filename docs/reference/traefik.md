@@ -3,8 +3,8 @@ name: "Traefik Reference"
 description: |
   Exact Traefik static and dynamic configuration, systemd unit, binary update, backup, logging, audit, and SELinux settings for the host.
 status: draft
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # Traefik Reference
@@ -22,7 +22,7 @@ global:
 
 api:
   dashboard: true
-  insecure: true
+  insecure: false
 
 ping:
   entryPoint: traefik
@@ -90,7 +90,7 @@ accessLog:
 
 Replace `security@example.com` with the operational email. File ownership is `root:root`, mode `0644`.
 
-The dashboard is bound to `127.0.0.1:8080` and metrics to `127.0.0.1:8082`. No Podman socket is used.
+The dashboard and API are attached to the `traefik` entrypoint on `127.0.0.1:8080` through a dynamic router with service `api@internal`. Metrics are bound to `127.0.0.1:8082`. No Podman socket is used.
 
 ## 2. Shared dynamic configuration
 
@@ -210,7 +210,7 @@ http:
 
 `passHostHeader: true` is required for Cockpit WebSocket support. Cockpit also requires `/etc/cockpit/cockpit.conf` with an `Origins` entry for `https://cockpit.${DOMAIN}` and `ProtocolHeader = X-Forwarded-Proto`. The host must bind Cockpit to `127.0.0.1:9090` and block direct access to port 9090.
 
-The Traefik dashboard and metrics are not routed. They are bound to `127.0.0.1:8080` and `127.0.0.1:8082` and are reached through an SSH tunnel. The current implementation still routes them as `traefik.${DOMAIN}` and `metrics.${DOMAIN}`. Findings F6 and F8 record that contradiction.
+The Traefik dashboard and metrics are not routed through public hostnames. The dashboard uses the loopback `traefik` entrypoint on `127.0.0.1:8080`, and metrics use `127.0.0.1:8082`. Both are reached through an SSH tunnel. Findings F6 and F8 track deployment verification.
 
 ## 3. Traefik systemd unit
 

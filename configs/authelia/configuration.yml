@@ -29,12 +29,9 @@ access_control:
     # Authelia portal itself must be reachable without auth (avoids circular redirect)
     - domain: auth.${DOMAIN}
       policy: bypass
-    # Metrics is read-only; 1FA sufficient
-    - domain: metrics.${DOMAIN}
-      policy: one_factor
-    # All management surfaces require 2FA
+    # Routed management surfaces require 2FA.
+    # Traefik dashboard, metrics, pmproxy, Grafana, and Valkey are loopback-only.
     - domain:
-        - traefik.${DOMAIN}
         - cockpit.${DOMAIN}
         - wg.${DOMAIN}
       policy: two_factor

@@ -11,27 +11,12 @@ http:
       tls:
         certResolver: cloudflare
 
-    # Traefik dashboard , VPN + Authelia 2FA
+    # Traefik dashboard and API, loopback only. Use an SSH tunnel.
     dashboard:
-      rule: "Host(`traefik.${DOMAIN}`)"
+      rule: "PathPrefix(`/`)"
       entryPoints:
-        - websecure
+        - traefik
       service: api@internal
-      middlewares:
-        - admin-chain
-      tls:
-        certResolver: cloudflare
-
-    # Prometheus metrics endpoint , VPN + Authelia 1FA (read-only data)
-    prometheus:
-      rule: "Host(`metrics.${DOMAIN}`)"
-      entryPoints:
-        - websecure
-      service: prometheus-svc
-      middlewares:
-        - admin-chain
-      tls:
-        certResolver: cloudflare
 
     # WireGuard management UI , VPN + Authelia 2FA
     wg-easy:
@@ -49,11 +34,6 @@ http:
       loadBalancer:
         servers:
           - url: "http://127.0.0.1:9091"
-
-    prometheus-svc:
-      loadBalancer:
-        servers:
-          - url: "http://127.0.0.1:8082"
 
     wg-easy-svc:
       loadBalancer:
