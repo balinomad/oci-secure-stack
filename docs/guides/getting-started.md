@@ -3,8 +3,8 @@ name: "Getting Started"
 description: |
   End-to-end tutorial for provisioning the OCI secure stack from a clean Oracle Cloud Infrastructure environment.
 status: draft
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # Getting Started
@@ -21,14 +21,15 @@ All of the following must exist before the instance is launched. Cloud-init cann
 - An OCI compute instance with Oracle Linux 9. AMD and ARM shapes are supported.
 - A block volume attached as paravirtualized, 50 GB minimum.
 - An instance dynamic group and IAM policy that allow `read secret-family` in the Vault compartment.
-- An OCI Vault with three secrets.
+- An OCI Vault with three mandatory secrets and one Grafana secret for the `live` or `history` profile.
 - A Cloudflare zone and an API token with `Zone → DNS → Edit` permission on that zone.
 - DNS records for every hostname in section 5.
 - A workstation with `yq` v4 and `envsubst` for rendering the deployment file.
+- Capacity for the selected monitoring profile. The `live` profile needs 4 GB RAM, 2 vCPU, and 2 GB free disk. The `history` profile needs 6 GB RAM, 2 vCPU, and 5 GB free disk. See `docs/reference/infrastructure.md` section 8.
 
 ### Free Tier fit
 
-The stack targets Oracle Cloud Always Free. As of 2026-11-13, Oracle documents two AMD Micro instances, an Ampere A1 allowance equivalent to two OCPUs and 12 GB of memory, and 200 GB of block storage shared with boot volumes. Oracle publishes the current figures in [Always Free Resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm). One instance with the default 50 GB boot volume and a 50 GB block volume fits the documented allowance. The minimum practical shape is not yet verified. Confirm the allowance in the OCI console before provisioning.
+The stack targets Oracle Cloud Always Free. As of 2026-11-13, Oracle documents two AMD Micro instances, an Ampere A1 allowance equivalent to two OCPUs and 12 GB of memory, and 200 GB of block storage shared with boot volumes. Oracle publishes the current figures in [Always Free Resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm). One instance with the default 50 GB boot volume and a 50 GB block volume fits the documented allowance. The minimum practical shape is not yet verified. Confirm the allowance in the OCI console before provisioning. A 2 OCPU and 4 GB instance fits the `live` monitoring profile. The `history` profile needs 6 GB. If the selected shape has less memory, set `MONITORING_PROFILE=none` or leave the UI disabled.
 
 SSH hardening: Oracle Linux 9 OCI images disable password authentication by default. Verify before exposing port 22:
 
@@ -49,7 +50,7 @@ Allow inbound traffic only for the following ports.
 | 51820 | UDP      | 0.0.0.0/0 | WireGuard VPN                                |
 | 22    | TCP      | Admin IP  | SSH, initial setup and emergency access only |
 
-Do not expose the Traefik dashboard, raw metrics, Cockpit, Authelia, or wg-easy directly.
+Do not expose the Traefik dashboard, raw metrics, `pmproxy`, Grafana, Valkey, Cockpit, Authelia, or wg-easy directly.
 
 ## 3. Configure variables
 
@@ -63,6 +64,10 @@ The template uses `${VARIABLE}` syntax for site-specific values. All other `${..
 | `${CF_SECRET_OCID}`   | OCID of the Cloudflare token secret in OCI Vault        | `ocid1.vaultsecret.oc1..xxxx` |
 | `${AUTH_SECRET_OCID}` | OCID of the Authelia admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..yyyy` |
 | `${WG_SECRET_OCID}`   | OCID of the wg-easy admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..zzzz` |
+| `${GRAFANA_SECRET_OCID}` | OCID of the Grafana admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..gggg` |
+| `${MONITORING_PROFILE}` | Monitoring profile: `live`, `history`, or `none`        | `live`                        |
+
+`${GRAFANA_SECRET_OCID}` is required when `${MONITORING_PROFILE}` is `live` or `history`.
 
 The following hostnames are derived from `${DOMAIN}`:
 
@@ -70,7 +75,7 @@ The following hostnames are derived from `${DOMAIN}`:
 - `cockpit.${DOMAIN}` for Cockpit
 - `wg.${DOMAIN}` for wg-easy
 
-The Traefik dashboard and metrics are loopback-only and have no DNS records or Traefik routes.
+The Traefik dashboard, Traefik metrics, `pmproxy`, Grafana, and Valkey are loopback-only and have no DNS records or Traefik routes.
 
 Create a `.env` file. Never commit it.
 
@@ -81,11 +86,13 @@ ADMIN_EMAIL=admin@example.com
 CF_SECRET_OCID=ocid1.vaultsecret.oc1..xxxx
 AUTH_SECRET_OCID=ocid1.vaultsecret.oc1..yyyy
 WG_SECRET_OCID=ocid1.vaultsecret.oc1..zzzz
+GRAFANA_SECRET_OCID=ocid1.vaultsecret.oc1..gggg
+MONITORING_PROFILE=live
 ```
 
 ## 4. Create OCI Vault secrets
 
-The cloud-init script fetches three secrets at first boot with Instance Principal authentication. No credentials are embedded in the template.
+The cloud-init script fetches three mandatory secrets and the Grafana secret at first boot with Instance Principal authentication. No credentials are embedded in the template.
 
 ### 4.1 IAM policy
 
@@ -132,7 +139,17 @@ This is the initial wg-easy web UI admin password. It is processed only on the f
 2. Use the chosen password as plain text.
 3. Copy the secret OCID. This is `${WG_SECRET_OCID}`.
 
-After initial setup, the `INIT_USERNAME` and `INIT_PASSWORD` values are no longer processed. The credentials are stored in wg-easy's SQLite database on the block volume. The Vault secret is needed again only when bootstrapping a fresh instance.
+Cloud-init processes the `INIT_USERNAME` and `INIT_PASSWORD` values only on first boot. The credentials are stored in wg-easy's SQLite database on the block volume. The Vault secret is needed again only when bootstrapping a fresh instance.
+
+### 4.5 Grafana admin password
+
+This secret is required when `MONITORING_PROFILE` is `live` or `history`.
+
+1. Create a Vault secret named `grafana-admin-password`.
+2. Use the chosen password as plain text.
+3. Copy the secret OCID. This is `${GRAFANA_SECRET_OCID}`.
+
+Cloud-init writes the password to `/data/monitoring/grafana/env` with mode `0600` and owner `grafana:grafana`. It does not write the password to a tracked file or the system journal.
 
 Verify secret access after boot:
 
@@ -163,13 +180,13 @@ A wildcard record means new application services resolve without adding individu
 
 ## 6. Render the deployment file
 
-Create `.env` as described in section 3. Render the component configuration into the cloud-config template, then substitute only the six template variables. The renderer requires `yq` v4. Pass only the six variables to `envsubst` so shell variables inside `runcmd` remain intact.
+Create `.env` as described in section 3. Render the component configuration into the cloud-config template, then substitute only the eight template variables. The renderer requires `yq` v4. Pass only the eight variables to `envsubst` so shell variables inside `runcmd` remain intact.
 
 ```bash
 export $(cat .env | xargs)
 
 scripts/repo/render-config.sh \
-  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
+  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE}' \
   > cloud-config.yaml
 ```
 
@@ -215,7 +232,7 @@ Run the automated verification script from a checkout of this repository on the 
 sudo ./scripts/host/verify-stack.sh
 ```
 
-Exit code `0` means all checks passed. Exit code `1` means one or more checks failed. The script covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
+Exit code `0` means all checks passed. Exit code `1` means one or more checks failed. The script covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, PCP export, optional Grafana and Valkey services, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
 
 If a check fails, see `docs/guides/operations.md` for component checks and common failure patterns.
 
@@ -247,13 +264,25 @@ With WireGuard connected, open the routed admin services. Each should require Au
 
 Without WireGuard, both URLs must return `403 Forbidden` with no login prompt.
 
-The Traefik dashboard and metrics are not routed. Reach them through SSH local forwarding as described in `docs/guides/operations.md`:
+The Traefik dashboard, Traefik metrics, PCP `pmproxy`, and Grafana are not routed. Reach them through SSH local forwarding as described in `docs/guides/operations.md`:
 
 ```bash
-ssh -L 8080:127.0.0.1:8080 -L 8082:127.0.0.1:8082 opc@<instance-public-ip>
+ssh -L 3000:127.0.0.1:3000 \
+  -L 8080:127.0.0.1:8080 \
+  -L 8082:127.0.0.1:8082 \
+  -L 44322:127.0.0.1:44322 \
+  opc@<instance-public-ip>
 ```
 
-Then open `http://localhost:8080/dashboard/` and `http://localhost:8082/metrics`.
+Then open `http://localhost:8080/dashboard/`, `http://localhost:8082/metrics`, and `http://localhost:3000`. Log in to Grafana with the user `admin` and the `grafana-admin-password` value from OCI Vault.
+
+If `MONITORING_PROFILE=history`, confirm the history service:
+
+```bash
+sudo valkey-cli -h 127.0.0.1 ping
+```
+
+The expected response is `PONG`.
 
 ## 11. If you are changing the stack
 

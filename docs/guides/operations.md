@@ -3,8 +3,8 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # Operations
@@ -33,7 +33,7 @@ The renderer requires `yq` v4.
 ```bash
 export $(cat .env | xargs)
 scripts/repo/render-config.sh \
-  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
+  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE}' \
   > cloud-config.yaml
 
 yamllint cloud-config.yaml
@@ -66,7 +66,7 @@ This validates the cloud-init key structure but does not execute anything. It re
 
 ### 1.5 Variable completeness
 
-Verify that all six variables are present and non-empty:
+Verify that all eight variables are present and non-empty:
 
 ```bash
 while IFS='=' read -r key value; do
@@ -104,7 +104,7 @@ sudo cloud-init modules --mode=config
 | 4    | Symlinks                          | `readlink -f /etc/traefik/letsencrypt` returns `/data/traefik/letsencrypt`                                                                                                                   |
 | 5    | Traefik directories and ownership | `ls -la /etc/traefik/` shows `traefik:traefik` ownership                                                                                                                                     |
 | 6    | Container tools                   | `podman --version`; `podman images` shows wg-easy; the `authelia` user store shows Authelia                                                                                                  |
-| 7    | Vault secrets                     | `/etc/traefik/env` contains `CF_DNS_API_TOKEN`; `/run/authelia-bootstrap.tmp` exists                                                                                                         |
+| 7    | Vault secrets                     | `/etc/traefik/env` contains `CF_DNS_API_TOKEN`; `/run/authelia-bootstrap.tmp` exists; `/run/grafana-bootstrap.tmp` exists for UI profiles                                     |
 | 8    | Authelia bootstrap                | `/data/authelia/env`, `configuration.yml`, and `users_database.yaml` exist; `/data/authelia` is owned by `authelia`                                                                          |
 | 9    | wg-easy environment               | `/data/containers/wg-easy/env` exists and is owned by host UID `300000`; `/run/wg-bootstrap.tmp` does not exist                                                                              |
 | 10   | SELinux contexts                  | `ausearch -m avc -ts recent \| grep -E 'traefik\|authelia'` returns nothing                                                                                                                  |
@@ -114,13 +114,14 @@ sudo cloud-init modules --mode=config
 | 13   | IP forwarding                     | `sysctl net.ipv4.ip_forward` returns `1`                                                                                                                                                     |
 | 14   | Journal persistence               | `/var/log/journal/` exists                                                                                                                                                                   |
 | 15   | Firewall rules                    | `firewall-cmd --list-all` shows HTTP, HTTPS, and 51820/UDP                                                                                                                                   |
-| 16   | Service start                     | `systemctl is-active traefik wg-easy cockpit.socket pmcd pmlogger`; the `authelia` user unit is active                                                                                       |
+| 16   | Service start                     | `systemctl is-active traefik wg-easy cockpit.socket pmcd pmlogger pmproxy`; the `authelia` user unit is active                                                                               |
+| 17   | Monitoring                        | `curl -fsS http://127.0.0.1:44322/metrics` succeeds; Grafana and Valkey are active only for their profiles                                                                                    |
 
 Once all blocks pass, run `sudo ./scripts/host/verify-stack.sh`.
 
 ## 3. Verify a deployment
 
-The `scripts/host/verify-stack.sh` script runs the checks in sequence and produces a pass or fail summary. It covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
+The `scripts/host/verify-stack.sh` script runs the checks in sequence and produces a pass or fail summary. It covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, PCP export, optional Grafana and Valkey services, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
 
 From a checkout of this repository on the instance:
 
@@ -270,17 +271,58 @@ sudo ausearch -m avc -ts today | audit2allow -M local-stack
 sudo semodule -i local-stack.pp
 ```
 
-### 4.7 Access the dashboard and metrics
+### 4.7 PCP and monitoring UI
 
-The Traefik dashboard and metrics are loopback-only. Use SSH local port forwarding:
+Check the PCP data plane:
 
 ```bash
-ssh -L 8080:127.0.0.1:8080 -L 8082:127.0.0.1:8082 opc@<instance-public-ip>
+systemctl status pmcd pmlogger pmproxy pmie
+sudo ss -ltnp | grep -E ':44322|:8082'
+curl -fsS http://127.0.0.1:44322/metrics >/dev/null
+pminfo -f containers.name
+pminfo -f openmetrics.control
 ```
 
-Then open `http://localhost:8080/dashboard/` for the dashboard and `http://localhost:8082/metrics` for metrics. Do not create Traefik routes for these endpoints. If they are routed as hostnames, findings F6 and F8 apply.
+Expected: `pmproxy` listens on `127.0.0.1:44322`, the metrics request succeeds, and both PMDAs return metric data. The Podman PMDA covers rootful containers only. Rootless Authelia metrics are not collected.
 
-### 4.8 Manage WireGuard peers
+For the `live` or `history` profile:
+
+```bash
+systemctl status grafana-server
+curl -fsS http://127.0.0.1:3000/api/health
+sudo ss -ltnp | grep ':3000'
+```
+
+Expected: `grafana-server` is active, the health response contains `"database": "ok"`, and Grafana listens on `127.0.0.1:3000`.
+
+For the `history` profile:
+
+```bash
+systemctl status valkey
+sudo ss -ltnp | grep ':6379'
+valkey-cli -h 127.0.0.1 ping
+valkey-cli -h 127.0.0.1 info memory
+```
+
+Expected: `PONG`, a loopback listener, and memory use below the 512 MB cap. A `noeviction` error means the history store is full. Increase the cap only after increasing total RAM.
+
+The monitoring profile and capacity minimums are canonical in `docs/reference/infrastructure.md` section 8.
+
+### 4.8 Access the dashboard, metrics, and monitoring UI
+
+The Traefik dashboard, Traefik metrics, `pmproxy`, and Grafana are loopback-only. Use SSH local port forwarding:
+
+```bash
+ssh -L 3000:127.0.0.1:3000 \
+  -L 8080:127.0.0.1:8080 \
+  -L 8082:127.0.0.1:8082 \
+  -L 44322:127.0.0.1:44322 \
+  opc@<instance-public-ip>
+```
+
+Then open `http://localhost:8080/dashboard/`, `http://localhost:8082/metrics`, and `http://localhost:3000`. Do not create Traefik routes for these endpoints. If they are routed as hostnames, findings F6 and F8 apply.
+
+### 4.9 Manage WireGuard peers
 
 Use the wg-easy UI at `https://wg.<domain>` over the VPN. Add one peer per device. Download the client configuration or scan the QR code.
 
@@ -301,6 +343,28 @@ Get the server public key from the wg-easy admin panel or from the container:
 sudo podman exec wg-easy wg show wg0 public-key
 ```
 
+### 4.10 Change the monitoring profile
+
+The deployment sets `MONITORING_PROFILE` at first boot. To add the monitoring UI to an existing instance, run the deployment helper from a repository checkout:
+
+```bash
+sudo ./scripts/host/deploy/07-monitoring.sh live
+```
+
+For history:
+
+```bash
+sudo ./scripts/host/deploy/07-monitoring.sh history
+```
+
+For PCP only:
+
+```bash
+sudo ./scripts/host/deploy/07-monitoring.sh none
+```
+
+The helper installs packages, writes configuration from `configs/`, enables services, and does not remove existing Grafana or Valkey state. It requires `GRAFANA_ADMIN_PASSWORD` or `GRAFANA_SECRET_OCID` when Grafana is enabled and `/data/monitoring/grafana/env` does not exist. The capacity minimums are in `docs/reference/infrastructure.md` section 8.
+
 ## 5. Common failure patterns
 
 ### Block volume not found
@@ -319,6 +383,7 @@ sudo podman exec wg-easy wg show wg0 public-key
 
 - Instance Principal is not configured. Verify the dynamic group and IAM policy.
 - A secret OCID is wrong. Verify the values in `.env` against the OCI Console.
+- `GRAFANA_SECRET_OCID` is empty while `MONITORING_PROFILE` is `live` or `history`.
 - `oci-cli` is not installed. Check the DNF step.
 
 Test Instance Principal manually:
@@ -413,6 +478,50 @@ sudo podman logs wg-easy
 sudo podman inspect wg-easy --format '{{json .HostConfig.IDMappings}}'
 stat -c '%u:%g' /data/containers/wg-easy
 lsmod | grep wireguard
+```
+
+### Grafana does not start
+
+**Symptom:** `grafana-server.service` is failed and the journal shows a configuration, permission, or port error.
+
+**Causes:**
+
+- The `grafana` user or group does not exist because the package install failed.
+- `/data/monitoring/grafana` is missing or has the wrong owner.
+- `/data/monitoring/grafana/env` is missing or has the wrong mode.
+- Another process uses port 3000.
+
+**Checks:**
+
+```bash
+sudo journalctl -u grafana-server -n 100
+id grafana
+ls -ld /data/monitoring/grafana
+sudo ls -l /data/monitoring/grafana/env
+sudo ss -ltnp | grep ':3000'
+```
+
+### PCP export or history is unavailable
+
+**Symptom:** `pmproxy` does not answer, `pminfo` returns no data for a PMDA, or Grafana shows a datasource error.
+
+**Causes:**
+
+- `pmproxy` is not active or does not read `/etc/sysconfig/pmproxy`.
+- The Podman PMDA is not installed or `podman.socket` is not active.
+- The OpenMetrics PMDA cannot reach `127.0.0.1:8082`.
+- Valkey is not active in the `history` profile.
+
+**Checks:**
+
+```bash
+systemctl status pmcd pmlogger pmproxy pmie
+systemctl status podman.socket
+curl -fsS http://127.0.0.1:8082/metrics >/dev/null
+curl -fsS http://127.0.0.1:44322/metrics >/dev/null
+pminfo -f openmetrics.control
+systemctl status valkey
+valkey-cli -h 127.0.0.1 ping
 ```
 
 ### SELinux blocks a service
@@ -525,6 +634,30 @@ sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
 
 Update the resulting hash in `/data/authelia/config/users_database.yaml`. No Traefik restart is needed.
 
+### 9.3 Grafana admin password
+
+1. Update the `grafana-admin-password` secret in OCI Vault.
+2. Fetch the new value on the instance:
+
+```bash
+NEW_PASS=$(oci secrets secret-bundle get \
+  --secret-id <GRAFANA_SECRET_OCID> \
+  --query "data.secretBundleContent.content" \
+  --raw-output | base64 -d)
+```
+
+3. Replace the environment file without printing the value:
+
+```bash
+printf 'GF_SECURITY_ADMIN_PASSWORD=%s\n' "$NEW_PASS" \
+  | sudo tee /data/monitoring/grafana/env >/dev/null
+sudo chown grafana:grafana /data/monitoring/grafana/env
+sudo chmod 0600 /data/monitoring/grafana/env
+sudo systemctl restart grafana-server
+```
+
+Changing the environment file does not change an existing Grafana admin password in the database. Use the Grafana user administration page to change the stored password, or reset it with `grafana-cli` after confirming the supported syntax for the installed version.
+
 ## 10. Replace the VM
 
 1. Note the block volume OCID and attachment details.
@@ -538,7 +671,7 @@ Total downtime is the interval between old instance termination and the new inst
 
 ## 11. Backup and restore
 
-The block volume holds all persistent state. If it is lost or corrupted, WireGuard keys, TLS certificates, the Authelia database, container data, and logs are lost. VM replacement does not protect against this.
+The block volume holds all persistent state. If it is lost or corrupted, WireGuard keys, TLS certificates, the Authelia database, container data, Grafana state, optional Valkey history, and logs are lost. VM replacement does not protect against this.
 
 Restic is the recommended tool. It is a single static binary, deduplicating, encrypted at rest, and compatible with OCI Object Storage through its S3-compatible API.
 
@@ -546,7 +679,7 @@ Restic is the recommended tool. It is a single static binary, deduplicating, enc
 
 1. Create a private OCI Object Storage bucket.
 2. Create an OCI Customer Secret Key under the user profile.
-3. Store the key in OCI Vault as a fourth secret.
+3. Store the key in OCI Vault as a separate backup secret.
 
 ### 11.2 Backup commands
 
@@ -561,6 +694,8 @@ restic backup /data
 restic snapshots
 restic restore latest --target /data
 ```
+
+The backup includes `/data/monitoring/grafana` and, when the `history` profile is active, `/data/monitoring/valkey`. The Grafana environment file contains a secret and is stored under `/data/monitoring/grafana/env`. Protect the Restic repository accordingly. If history is explicitly excluded, remove `/data/monitoring/valkey` from the backup selection and record that decision.
 
 ### 11.3 Automate with systemd
 
@@ -630,7 +765,7 @@ The local backup excludes `/etc/traefik/env`. Restore the Cloudflare token from 
 systemctl status traefik
 getenforce
 sudo firewall-cmd --list-all
-sudo ss -ltnp | grep -E ':80|:443|:8080|:8082'
+sudo ss -ltnp | grep -E ':80|:443|:3000|:6379|:8080|:8082|:44322'
 ls -l /opt/traefik/bin/traefik
 ls -ld /data/traefik /data/logs/traefik /etc/traefik
 ls -l /data/traefik/letsencrypt/acme.json
@@ -640,6 +775,8 @@ id authelia
 loginctl show-user authelia -p Linger
 grep '^authelia:' /etc/subuid /etc/subgid
 ls -ld /data/authelia /data/containers/wg-easy
+ls -ld /data/monitoring/grafana /data/monitoring/valkey
+ls -l /data/monitoring/grafana/env
 ls -l /etc/containers/systemd/wg-easy.container
 sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
   systemctl --user is-active authelia.service
@@ -657,8 +794,10 @@ Expected posture:
 - `/data/containers/wg-easy` is owned by host UID and GID `300000`.
 - `/data/traefik/letsencrypt/acme.json` is mode `0600`.
 - `/etc/traefik/env` is mode `0600` and owned by `traefik:traefik`.
+- `/data/monitoring/grafana/env` is mode `0600` and owned by `grafana:grafana`.
 - `/opt/traefik` and `/etc/traefik` are owned by root.
-- Dashboard and metrics are loopback-only.
+- Dashboard, metrics, `pmproxy`, Grafana, and Valkey are loopback-only.
+- Grafana and Valkey have no Traefik routes and no public firewall ports.
 - No Podman socket is mounted into Traefik.
 - SELinux remains enforcing.
 - Only ports 80, 443, 51820/UDP, and bootstrap SSH are exposed.

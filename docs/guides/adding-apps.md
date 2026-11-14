@@ -3,8 +3,8 @@ name: "Adding Applications"
 description: |
   How to build, deploy, route, secure, and persist an application container in the OCI secure stack.
 status: draft
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-14
 ---
 
 # Adding Applications
@@ -25,7 +25,7 @@ The stack owns routing, TLS termination, authentication infrastructure, persiste
 | Authelia for authentication                   | No             | Yes      |
 | OCI Vault for secrets                         | No             | Yes      |
 | Stack logging conventions                     | No             | Yes      |
-| Prometheus metrics exposure                   | No             | Yes      |
+| OpenMetrics exposure for PCP ingestion        | No             | Yes      |
 
 | Concern                       | Stack owns                                        | Application owns                                    |
 | ----------------------------- | ------------------------------------------------- | --------------------------------------------------- |
@@ -39,7 +39,7 @@ The stack owns routing, TLS termination, authentication infrastructure, persiste
 | Backup                        | Restic covers all of `/data/`                     | Storing data under `/data/containers/<app>/`        |
 | Secret storage                | OCI Vault infrastructure                          | Creating and referencing application secrets        |
 | Logging infrastructure        | Journal, Traefik access logs                      | Application log output and rotation                 |
-| Monitoring infrastructure     | PCP, Prometheus endpoint                          | Exposing a `/metrics` endpoint if needed            |
+| Monitoring infrastructure     | PCP, `pmproxy`, optional Grafana                  | Exposing a loopback `/metrics` endpoint if needed   |
 | OS security                   | SELinux, auditd, firewall                         | `:Z` volume flag, no privileged containers          |
 | Networking                    | Firewall, public port exposure                    | Binding to `127.0.0.1` only                         |
 | VM lifecycle                  | Cloud-init, block volume                          | Nothing                                             |
@@ -511,38 +511,41 @@ Ports reserved by the stack:
 | ----- | ------------------------------------ |
 | 80    | Traefik HTTP                         |
 | 443   | Traefik HTTPS                        |
+| 3000  | Grafana, loopback                    |
+| 6379  | Valkey, loopback, history profile    |
 | 8082  | Traefik Prometheus metrics, internal |
 | 9090  | Cockpit                              |
 | 9091  | Authelia                             |
+| 44322 | PCP pmproxy, loopback                |
 | 51820 | WireGuard, UDP                       |
 | 51821 | wg-easy management UI                |
 
 ## 12. Monitoring
 
-PCP collects host-level metrics. The Prometheus endpoint exposes Traefik router, service, and middleware metrics. Both are available without application-side configuration.
+PCP collects host metrics through `pmcd` and exposes them through `pmproxy` on `127.0.0.1:44322`. Grafana reads `pmproxy` through the PCP Vector datasource. The live profile is default. The history profile adds Valkey for `pmseries` retention. The monitoring profiles and capacity minimums are canonical in `docs/reference/infrastructure.md` section 8.
 
-If the application exposes a `/metrics` endpoint, create a separate Traefik route restricted to `admin-chain`:
+The OpenMetrics PMDA collects Traefik metrics from `127.0.0.1:8082`. The stack also creates `/etc/pcp/openmetrics/traefik.url`.
 
-```yaml
-# /etc/traefik/config/<app-name>-metrics.yaml
-http:
-  routers:
-    <app-name>-metrics:
-      rule: "Host(`metrics-<app-name>.<domain>`)"
-      entryPoints:
-        - websecure
-      service: <app-name>-metrics-svc
-      middlewares:
-        - admin-chain
-      tls:
-        certResolver: cloudflare
+If the application exposes a Prometheus or OpenMetrics endpoint on loopback, add a URL file to the OpenMetrics PMDA. Do not create a Traefik route for the metrics endpoint.
 
-  services:
-    <app-name>-metrics-svc:
-      loadBalancer:
-        servers:
-          - url: "http://127.0.0.1:<metrics-port>"
+```bash
+sudo install -d -m 0755 /etc/pcp/openmetrics
+sudo tee /etc/pcp/openmetrics/<app-name>.url >/dev/null <<'EOF'
+http://127.0.0.1:<metrics-port>/metrics
+EOF
+sudo install -d -m 0755 /var/lib/pcp/pmdas/openmetrics/config.d
+sudo ln -sfn /etc/pcp/openmetrics/<app-name>.url \
+  /var/lib/pcp/pmdas/openmetrics/config.d/<app-name>.url
+sudo systemctl restart pmcd
 ```
+
+Verify the PMDA sees the new URL:
+
+```bash
+pminfo -f openmetrics.control
+```
+
+The application must bind its metrics listener to `127.0.0.1`. Do not expose a `metrics-<app-name>.<domain>` hostname. Do not open the metrics port in firewalld or the OCI network rules. An external Prometheus server can scrape `pmproxy` later through a secure tunnel.
 
 ## 13. SELinux
 
