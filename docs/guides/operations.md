@@ -3,7 +3,7 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.3
+version: 1.4
 updated: 2026-11-14
 ---
 
@@ -32,7 +32,7 @@ The renderer requires `yq` v4.
 
 ```bash
 export $(cat .env | xargs)
-scripts/repo/render-config.sh \
+tools/render-config.sh \
   | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
   > cloud-config.yaml
 
@@ -119,16 +119,16 @@ sudo cloud-init modules --mode=config
 | 16   | Service start                     | `systemctl is-active traefik wg-easy cockpit.socket pmcd pmlogger pmproxy`; the `authelia` user unit is active                                                                               |
 | 17   | Monitoring                        | `curl -fsS http://127.0.0.1:44322/metrics` succeeds; Grafana and Valkey are active only for their profiles                                                                                    |
 
-Once all blocks pass, run `sudo ./scripts/host/verify-stack.sh`.
+Once all blocks pass, run `sudo ./infra/host/verify-stack.sh`.
 
 ## 3. Verify a deployment
 
-The `scripts/host/verify-stack.sh` script runs the checks in sequence and produces a pass or fail summary. It covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, PCP export, optional Grafana and Valkey services, alert delivery, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
+The `infra/host/verify-stack.sh` script runs the checks in sequence and produces a pass or fail summary. It covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, PCP export, optional Grafana and Valkey services, alert delivery, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
 
 From a checkout of this repository on the instance:
 
 ```bash
-sudo ./scripts/host/verify-stack.sh
+sudo ./infra/host/verify-stack.sh
 ```
 
 Exit code `0` means all checks passed. Exit code `1` means one or more checks failed.
@@ -357,7 +357,7 @@ To disable alert delivery:
 sudo systemctl disable --now pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 ```
 
-Re-enable it with `sudo ./scripts/host/deploy/08-alerting.sh`. The helper preserves an existing `/data/monitoring/alerting/env`.
+Re-enable it with `sudo ./infra/host/08-alerting.sh`. The helper preserves an existing `/data/monitoring/alerting/env`.
 
 If no alert arrives, check:
 
@@ -410,22 +410,22 @@ sudo podman exec wg-easy wg show wg0 public-key
 The deployment sets `MONITORING_PROFILE` at first boot. To add the monitoring UI to an existing instance, run the deployment helper from a repository checkout:
 
 ```bash
-sudo ./scripts/host/deploy/07-monitoring.sh live
+sudo ./infra/host/07-monitoring.sh live
 ```
 
 For history:
 
 ```bash
-sudo ./scripts/host/deploy/07-monitoring.sh history
+sudo ./infra/host/07-monitoring.sh history
 ```
 
 For PCP only:
 
 ```bash
-sudo ./scripts/host/deploy/07-monitoring.sh none
+sudo ./infra/host/07-monitoring.sh none
 ```
 
-The helper installs packages, writes configuration from `configs/`, enables services, and does not remove existing Grafana or Valkey state. It requires `GRAFANA_ADMIN_PASSWORD` or `GRAFANA_SECRET_OCID` when Grafana is enabled and `/data/monitoring/grafana/env` does not exist. The capacity minimums are in `docs/reference/infrastructure.md` section 8.
+The helper installs packages, writes configuration from `infra/configs/`, enables services, and does not remove existing Grafana or Valkey state. It requires `GRAFANA_ADMIN_PASSWORD` or `GRAFANA_SECRET_OCID` when Grafana is enabled and `/data/monitoring/grafana/env` does not exist. The capacity minimums are in `docs/reference/infrastructure.md` section 8.
 
 ## 5. Common failure patterns
 

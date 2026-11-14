@@ -3,7 +3,7 @@ name: "Adding Applications"
 description: |
   How to build, deploy, route, secure, and persist an application container in the OCI secure stack.
 status: draft
-version: 1.1
+version: 1.2
 updated: 2026-11-14
 ---
 
@@ -588,7 +588,7 @@ Applications register themselves by saving a deployment manifest to `/data/apps/
 └── another-app.sh
 ```
 
-`scripts/host/deploy-service.sh` saves its own invocation as a manifest. The manifest records the application name, image, port, domain, volumes, environment, and admin flag. The cloud-init replay block is:
+`infra/host/deploy-service.sh` saves its own invocation as a manifest. The manifest records the application name, image, port, domain, volumes, environment, and admin flag. The cloud-init replay block is:
 
 ```bash
 if [ -d /data/apps ] && ls /data/apps/*.sh 2>/dev/null | grep -q .; then
@@ -602,7 +602,7 @@ fi
 
 Manifest lifecycle:
 
-- Created when `scripts/host/deploy-service.sh` deploys an application.
+- Created when `infra/host/deploy-service.sh` deploys an application.
 - Updated when the same application name is deployed again.
 - Deleted manually when an application is permanently removed.
 
@@ -635,7 +635,7 @@ sudo systemctl daemon-reload
 3. Deploy with the script:
 
    ```bash
-   sudo ./scripts/host/deploy-service.sh \
+   sudo ./infra/host/deploy-service.sh \
      --name <app-name> \
      --image <image>:<tag> \
      --port <port> \
@@ -669,7 +669,7 @@ sudo systemctl restart <app-name>
 Always use `--dry-run` before deploying a new service:
 
 ```bash
-sudo ./scripts/host/deploy-service.sh \
+sudo ./infra/host/deploy-service.sh \
   --name testapp \
   --image nginx:latest \
   --port 8080 \
@@ -682,7 +682,7 @@ Inspect the generated Quadlet and Traefik files printed to stdout. Verify indent
 Deploy a test service:
 
 ```bash
-sudo ./scripts/host/deploy-service.sh \
+sudo ./infra/host/deploy-service.sh \
   --name testapp \
   --image nginx:latest \
   --port 8080 \

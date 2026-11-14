@@ -3,8 +3,8 @@ name: "ADR-005: Application Container Contract"
 description: |
   Decision to run application containers rootless under dedicated users, with restricted volumes, minimal capabilities, and non-world-readable secrets.
 status: draft
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # ADR-005: Application Container Contract
@@ -15,7 +15,7 @@ The current deployment path runs services as `opc`, writes environment values in
 
 ## Affected paths
 
-- `scripts/host/deploy-service.sh:19-20,108-123,125-130,187-206,232-239`
+- `infra/host/deploy-service.sh:19-20,108-123,125-130,187-206,232-239`
 - `docs/process/issue-log.md` F11, F13, F29
 
 ## Current text or behavior
@@ -54,7 +54,7 @@ Adopt option 2.
 
 ## Consequences
 
-- `scripts/host/deploy-service.sh` must validate volume sources and secret handling.
+- `infra/host/deploy-service.sh` must validate volume sources and secret handling.
 - F11 and F13 are addressed by the new contract. Implementation and deployment verification remain.
 - Application onboarding requires a dedicated user and a Quadlet unit.
 - Secret rotation must update the secret store, not rewrite a manifest.

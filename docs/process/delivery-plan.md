@@ -3,7 +3,7 @@ name: "OCI Secure Stack Delivery Plan"
 description: |
   Decision-first plan for resuming work, with phases, tasks, gates, estimates, and immediate next actions.
 status: active
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -70,7 +70,7 @@ Gate GB: clean working tree, decisions tracked, baseline tagged.
 
 Only findings that follow from confirmed decisions are fixed here.
 
-- [ ] C1 Add `scripts/repo/validate.sh`: YAML, cloud-init schema, shellcheck, envsubst completeness.
+- [ ] C1 Add `tools/validate.sh`: YAML, cloud-init schema, shellcheck, envsubst completeness.
 - [ ] C2 F2 and F3: hard-fail when `/data` is absent or not XFS.
 - [ ] C3 F4: abort boot when a Vault secret cannot be fetched.
 - [ ] C4 F1: resolve Authelia UID and ownership; prove file access.
@@ -98,12 +98,12 @@ Gate GC: static validation green, every P0 finding closed or explicitly deferred
 - [ ] D9 Perform a backup and restore drill if ADR-006 includes it.
 - [ ] D10 Archive evidence under `tmp/unverified/` or in the findings register.
 
-Gate GD: `scripts/host/verify-stack.sh` exits 0 and every item in `docs/process/acceptance-criteria.md` is proven.
+Gate GD: `infra/host/verify-stack.sh` exits 0 and every item in `docs/process/acceptance-criteria.md` is proven.
 
 ## Phase E: Structural refactor (3-5 days)
 
-- [x] E1 Extract configuration into `configs/`. Evidence: `configs/manifest.yaml`, `scripts/repo/render-config.sh`.
-- [ ] E2 Populate `scripts/host/deploy/00-06` as idempotent modules.
+- [x] E1 Extract configuration into `infra/configs/`. Evidence: `infra/manifest.yaml`, `tools/render-config.sh`.
+- [ ] E2 Populate `infra/host/00-06` as idempotent modules.
 - [ ] E3 Implement Makefile targets: `lint`, `render`, `deploy`, `verify`, `backup`.
 - [x] E4 Convert infrastructure containers to Quadlet per ADR-009.
 - [ ] E5 Clean-room deploy from the refactored tree.
@@ -117,7 +117,7 @@ Gate GE: parity with the Phase D baseline. No regression.
 - [x] F2 Write prerequisites and getting started from the documented OCI steps.
 - [x] F3 Write verification, maintenance, recovery, and troubleshooting into the operations runbook.
 - [x] F4 Remove unproven README claims and add a documentation map.
-- [x] F5 Make the documentation audit and link check pass. `scripts/repo/audit-docs.sh` exits 0.
+- [x] F5 Make the documentation audit and link check pass. `tools/audit-docs.sh` exits 0.
 - [ ] F6 Verify every legacy section maps to a tracked document, then delete the legacy tree.
 
 Gate GF: a new operator can deploy from tracked documentation alone. This gate remains open until Phase D produces deployment evidence.

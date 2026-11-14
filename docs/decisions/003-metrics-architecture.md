@@ -3,7 +3,7 @@ name: "ADR-003: Metrics Architecture"
 description: |
   Decision to use PCP-native metrics export instead of a full Prometheus server, with all endpoints bound to loopback.
 status: draft
-version: 1.3
+version: 1.4
 updated: 2026-11-14
 ---
 
@@ -16,7 +16,7 @@ A full Prometheus server, TSDB, and Alertmanager are redundant for an instance t
 ## Affected paths
 
 - `infra/cloud-init/cloud-config.example.yaml` sections `PACKAGES` and `runcmd`
-- `configs/pcp/`
+- `infra/configs/pcp/`
 - `docs/reference/traefik.md` metrics section
 - `docs/reference/infrastructure.md` sections 6 and 8
 - `docs/process/issue-log.md` F8

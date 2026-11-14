@@ -1,10 +1,10 @@
 ---
 name: "Application Manifest Reference"
 description: |
-  Exact format of the application manifest written by scripts/host/deploy-service.sh.
+  Exact format of the application manifest written by infra/host/deploy-service.sh.
 status: draft
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-14
 ---
 
 # Application Manifest Reference
@@ -13,7 +13,7 @@ This page defines the application manifest format used by the stack.
 
 ## 1. Application manifest format
 
-`scripts/host/deploy-service.sh` saves an application manifest to `/data/apps/<app-name>.sh`. The manifest records the original invocation:
+`infra/host/deploy-service.sh` saves an application manifest to `/data/apps/<app-name>.sh`. The manifest records the original invocation:
 
 ```bash
 #!/usr/bin/env bash

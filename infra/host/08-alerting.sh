@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly SCRIPT_DIR
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../../.." && pwd -P)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
 readonly REPO_ROOT
 
 readonly ALERTING_USER="alerting"
@@ -121,16 +121,16 @@ write_env() {
 
 install_runtime() {
   install -D -m 0755 -o root -g root \
-    "${REPO_ROOT}/configs/alerting/alerting.sh" \
+    "${REPO_ROOT}/infra/runtime/alerting/alerting.sh" \
     /usr/local/libexec/stack-alerting
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/alerting/services.list" \
+    "${REPO_ROOT}/infra/configs/alerting/services.list" \
     /etc/pcp/alerting/services.list
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/pcp/pmie/stack-alerts.pmie" \
+    "${REPO_ROOT}/infra/configs/pcp/pmie/stack-alerts.pmie" \
     /etc/pcp/pmie/stack-alerts.pmie
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/systemd/pcp-alerting.conf" \
+    "${REPO_ROOT}/infra/configs/systemd/pcp-alerting.conf" \
     /etc/tmpfiles.d/pcp-alerting.conf
 
   if command -v restorecon >/dev/null 2>&1; then
@@ -154,7 +154,7 @@ install_units() {
     pcp-heartbeat.service \
     pcp-heartbeat.timer; do
     install -D -m 0644 -o root -g root \
-      "${REPO_ROOT}/configs/systemd/${source}" \
+      "${REPO_ROOT}/infra/configs/systemd/${source}" \
       "/etc/systemd/system/${source}"
   done
 
@@ -167,7 +167,7 @@ install_units() {
     grafana-server.service.d/onfailure.conf \
     valkey.service.d/onfailure.conf; do
     install -D -m 0644 -o root -g root \
-      "${REPO_ROOT}/configs/systemd/${source}" \
+      "${REPO_ROOT}/infra/configs/systemd/${source}" \
       "/etc/systemd/system/${source}"
   done
 }

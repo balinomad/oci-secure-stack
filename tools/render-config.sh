@@ -3,14 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly SCRIPT_DIR
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
 readonly REPO_ROOT
-readonly MANIFEST="${REPO_ROOT}/configs/manifest.yaml"
+readonly MANIFEST="${REPO_ROOT}/infra/manifest.yaml"
 readonly TEMPLATE="${REPO_ROOT}/infra/cloud-init/cloud-config.example.yaml"
 readonly TMP_DIR="${REPO_ROOT}/tmp"
 readonly BEGIN_MARKER='  # BEGIN GENERATED CONFIG FILES'
 readonly END_MARKER='  # END GENERATED CONFIG FILES'
 readonly -a SUPPORTED_FORMATS=(yaml json ini systemd quadlet text)
+readonly -a STAGING_ROOTS=(infra/configs infra/runtime)
 
 declare -a STAGED_ROWS=()
 CHECK_ONLY=0
@@ -40,7 +41,7 @@ usage() {
   cat <<'EOF'
 Usage: render-config.sh [--check] [--output PATH]
 
-Render the enabled staged files from configs/manifest.yaml into the cloud-config
+Render the enabled staged files from infra/manifest.yaml into the cloud-config
 template. The result goes to standard output unless --output is set.
 
 Options:
@@ -136,6 +137,22 @@ is_supported_format() {
   return 1
 }
 
+is_staged_source() {
+  local source_real="$1"
+  local root
+  for root in "${STAGING_ROOTS[@]}"; do
+    if [[ "${source_real}" == "${REPO_ROOT}/${root}/"* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+is_executable_mode() {
+  local mode="$1"
+  (( (8#${mode} & 8#111) != 0 ))
+}
+
 render_entry() {
   local source="$1"
   local target="$2"
@@ -158,8 +175,8 @@ render_entry() {
   source_real="$(
     cd -- "$(dirname -- "${source_abs}")" && pwd -P
   )/$(basename -- "${source_abs}")"
-  if [[ "${source_real}" != "${REPO_ROOT}/configs/"* ]]; then
-    err "source file is outside configs/: ${source}"
+  if ! is_staged_source "${source_real}"; then
+    err "source file is outside infra/configs/ and infra/runtime/: ${source}"
     return 1
   fi
 
@@ -181,6 +198,11 @@ render_entry() {
   fi
   if ! is_supported_format "${format}"; then
     err "target has an unsupported format: ${target}"
+    return 1
+  fi
+  if is_executable_mode "${mode}" \
+    && [[ "${source_real}" != "${REPO_ROOT}/infra/runtime/"* ]]; then
+    err "executable staged source must be under infra/runtime/: ${source}"
     return 1
   fi
 

@@ -3,20 +3,20 @@ name: "ADR-009: Infrastructure Container Runtime"
 description: |
   Decision on whether infrastructure containers use Quadlet or plain systemd units.
 status: draft
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # ADR-009: Infrastructure Container Runtime
 
 ## Context
 
-The template defined Authelia and wg-easy as plain systemd units with `podman run`. Application containers use Quadlet through `scripts/host/deploy-service.sh`. The repository contains no deployment evidence for either infrastructure unit. The open question was whether infrastructure containers must use Quadlet. The runtime decision also sets the privilege boundary for each container.
+The template defined Authelia and wg-easy as plain systemd units with `podman run`. Application containers use Quadlet through `infra/host/deploy-service.sh`. The repository contains no deployment evidence for either infrastructure unit. The open question was whether infrastructure containers must use Quadlet. The runtime decision also sets the privilege boundary for each container.
 
 ## Affected paths
 
 - `infra/cloud-init/cloud-config.example.yaml:426-485`
-- `scripts/host/verify-stack.sh:155-177`
+- `infra/host/verify-stack.sh:155-177`
 - `docs/process/issue-log.md` F10, F12, F25
 
 ## Current text or behavior

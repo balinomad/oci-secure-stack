@@ -3,7 +3,7 @@ name: "Getting Started"
 description: |
   End-to-end tutorial for provisioning the OCI secure stack from a clean Oracle Cloud Infrastructure environment.
 status: draft
-version: 1.3
+version: 1.4
 updated: 2026-11-14
 ---
 
@@ -215,7 +215,7 @@ Create `.env` as described in section 3. Render the component configuration into
 ```bash
 export $(cat .env | xargs)
 
-scripts/repo/render-config.sh \
+tools/render-config.sh \
   | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
   > cloud-config.yaml
 ```
@@ -259,7 +259,7 @@ The `runcmd` blocks are designed to be idempotent. Re-running must not reformat 
 Run the automated verification script from a checkout of this repository on the instance:
 
 ```bash
-sudo ./scripts/host/verify-stack.sh
+sudo ./infra/host/verify-stack.sh
 ```
 
 Exit code `0` means all checks passed. Exit code `1` means one or more checks failed. The script covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, PCP export, optional Grafana and Valkey services, alert delivery, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.

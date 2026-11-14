@@ -3,7 +3,7 @@ name: "Process Record"
 description: |
   Index and maintenance rules for the project process record, including the status legend and evidence rules.
 status: active
-version: 1.3
+version: 1.4
 updated: 2026-11-14
 ---
 
@@ -27,13 +27,14 @@ Project-defining material lives outside this directory:
 | Role                   | Path                                         |
 | ---------------------- | -------------------------------------------- |
 | Stack implementation   | `infra/cloud-init/cloud-config.example.yaml` |
-| Configuration source   | `configs/manifest.yaml`                      |
-| Configuration renderer | `scripts/repo/render-config.sh`              |
-| Host verification      | `scripts/host/verify-stack.sh`               |
-| Monitoring deployment  | `scripts/host/deploy/07-monitoring.sh`       |
-| Alerting deployment    | `scripts/host/deploy/08-alerting.sh`         |
-| Application deployment | `scripts/host/deploy-service.sh`             |
-| Documentation audit    | `scripts/repo/audit-docs.sh`                 |
+| Configuration source   | `infra/manifest.yaml`                        |
+| Staged runtime assets  | `infra/runtime/`                             |
+| Configuration renderer | `tools/render-config.sh`                     |
+| Host verification      | `infra/host/verify-stack.sh`                 |
+| Monitoring deployment  | `infra/host/07-monitoring.sh`                |
+| Alerting deployment    | `infra/host/08-alerting.sh`                  |
+| Application deployment | `infra/host/deploy-service.sh`               |
+| Documentation audit    | `tools/audit-docs.sh`                        |
 
 Baseline: commit `2c1ae2c`, 2026-11-12.\
 Method: static analysis of repository files. No OCI deployment has been executed.

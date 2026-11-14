@@ -3,7 +3,7 @@ name: "ADR-011: Alert Delivery"
 description: |
   Decision to deliver local alerts through PCP pmie, systemd failure hooks, an HTTPS webhook, and an external heartbeat.
 status: draft
-version: 1.0
+version: 1.1
 updated: 2026-11-14
 ---
 
@@ -19,32 +19,32 @@ PCP is already installed and provides `pmie` for local threshold evaluation. sys
 
 ## Affected paths
 
-- `configs/alerting/alerting.sh`
-- `configs/alerting/env.example`
-- `configs/alerting/services.list`
-- `configs/pcp/pmie/stack-alerts.pmie`
-- `configs/systemd/pcp-alert-pmie.service`
-- `configs/systemd/pcp-alert-notify@.service`
-- `configs/systemd/pcp-service-check.service`
-- `configs/systemd/pcp-service-check.timer`
-- `configs/systemd/pcp-cert-check.service`
-- `configs/systemd/pcp-cert-check.timer`
-- `configs/systemd/pcp-heartbeat.service`
-- `configs/systemd/pcp-heartbeat.timer`
-- `configs/systemd/pcp-alerting.conf`
-- `configs/systemd/traefik.service.d/onfailure.conf`
-- `configs/systemd/wg-easy.service.d/onfailure.conf`
-- `configs/systemd/pmcd.service.d/onfailure.conf`
-- `configs/systemd/pmlogger.service.d/onfailure.conf`
-- `configs/systemd/pmproxy.service.d/onfailure.conf`
-- `configs/systemd/grafana-server.service.d/onfailure.conf`
-- `configs/systemd/valkey.service.d/onfailure.conf`
-- `configs/manifest.yaml`
-- `configs/config-index.md`
-- `configs/oci-vault/secrets.yaml`
+- `infra/runtime/alerting/alerting.sh`
+- `infra/configs/alerting/env.example`
+- `infra/configs/alerting/services.list`
+- `infra/configs/pcp/pmie/stack-alerts.pmie`
+- `infra/configs/systemd/pcp-alert-pmie.service`
+- `infra/configs/systemd/pcp-alert-notify@.service`
+- `infra/configs/systemd/pcp-service-check.service`
+- `infra/configs/systemd/pcp-service-check.timer`
+- `infra/configs/systemd/pcp-cert-check.service`
+- `infra/configs/systemd/pcp-cert-check.timer`
+- `infra/configs/systemd/pcp-heartbeat.service`
+- `infra/configs/systemd/pcp-heartbeat.timer`
+- `infra/configs/systemd/pcp-alerting.conf`
+- `infra/configs/systemd/traefik.service.d/onfailure.conf`
+- `infra/configs/systemd/wg-easy.service.d/onfailure.conf`
+- `infra/configs/systemd/pmcd.service.d/onfailure.conf`
+- `infra/configs/systemd/pmlogger.service.d/onfailure.conf`
+- `infra/configs/systemd/pmproxy.service.d/onfailure.conf`
+- `infra/configs/systemd/grafana-server.service.d/onfailure.conf`
+- `infra/configs/systemd/valkey.service.d/onfailure.conf`
+- `infra/manifest.yaml`
+- `infra/config-index.md`
+- `infra/configs/oci-vault/secrets.yaml`
 - `infra/cloud-init/cloud-config.example.yaml` sections `USERS & GROUPS`, `PACKAGES`, `runcmd`, and `Start Services`
-- `scripts/host/deploy/08-alerting.sh`
-- `scripts/host/verify-stack.sh`
+- `infra/host/08-alerting.sh`
+- `infra/host/verify-stack.sh`
 - `.env.example`
 - `docs/reference/infrastructure.md` sections 1, 4, 5, 6, 7, 8, and 9
 - `docs/guides/getting-started.md` sections 1, 3, 4, 6, 8, and 10

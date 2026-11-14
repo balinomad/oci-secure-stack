@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly SCRIPT_DIR
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../../.." && pwd -P)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
 readonly REPO_ROOT
 
 usage() {
@@ -61,11 +61,11 @@ write_grafana_env() {
 install_pcp() {
   dnf install -y pcp pcp-zeroconf pcp-pmda-podman pcp-pmda-openmetrics
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/pcp/pmproxy.env" /etc/sysconfig/pmproxy
+    "${REPO_ROOT}/infra/configs/pcp/pmproxy.env" /etc/sysconfig/pmproxy
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/pcp/openmetrics/traefik.url" /etc/pcp/openmetrics/traefik.url
+    "${REPO_ROOT}/infra/configs/pcp/openmetrics/traefik.url" /etc/pcp/openmetrics/traefik.url
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/systemd/pcp-openmetrics.conf" \
+    "${REPO_ROOT}/infra/configs/systemd/pcp-openmetrics.conf" \
     /etc/tmpfiles.d/pcp-openmetrics.conf
   systemctl enable --now pmcd.service pmlogger.service pmproxy.service podman.socket
 
@@ -85,21 +85,21 @@ install_grafana() {
   dnf install -y grafana grafana-pcp
   install -d -m 0750 -o grafana -g grafana /data/monitoring/grafana
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/grafana/grafana.ini" /etc/grafana/grafana.ini
+    "${REPO_ROOT}/infra/configs/grafana/grafana.ini" /etc/grafana/grafana.ini
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/grafana/provisioning/datasources/pcp.yml" \
+    "${REPO_ROOT}/infra/configs/grafana/provisioning/datasources/pcp.yml" \
     /etc/grafana/provisioning/datasources/pcp.yml
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/grafana/provisioning/dashboards/stack.yml" \
+    "${REPO_ROOT}/infra/configs/grafana/provisioning/dashboards/stack.yml" \
     /etc/grafana/provisioning/dashboards/stack.yml
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/grafana/dashboards/stack-overview.json" \
+    "${REPO_ROOT}/infra/configs/grafana/dashboards/stack-overview.json" \
     /etc/grafana/dashboards/stack-overview.json
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/systemd/grafana-server.service.d/env.conf" \
+    "${REPO_ROOT}/infra/configs/systemd/grafana-server.service.d/env.conf" \
     /etc/systemd/system/grafana-server.service.d/env.conf
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/systemd/grafana-server.service.d/data.conf" \
+    "${REPO_ROOT}/infra/configs/systemd/grafana-server.service.d/data.conf" \
     /etc/systemd/system/grafana-server.service.d/data.conf
   write_grafana_env
   systemctl daemon-reload
@@ -110,9 +110,9 @@ install_valkey() {
   dnf install -y valkey
   install -d -m 0750 -o valkey -g valkey /data/monitoring/valkey
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/valkey/valkey.conf" /etc/valkey/valkey.conf
+    "${REPO_ROOT}/infra/configs/valkey/valkey.conf" /etc/valkey/valkey.conf
   install -D -m 0644 -o root -g root \
-    "${REPO_ROOT}/configs/systemd/valkey.service.d/data.conf" \
+    "${REPO_ROOT}/infra/configs/systemd/valkey.service.d/data.conf" \
     /etc/systemd/system/valkey.service.d/data.conf
   systemctl daemon-reload
   systemctl enable --now valkey.service

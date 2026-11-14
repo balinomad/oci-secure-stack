@@ -3,7 +3,7 @@ name: "ADR-010: Local Monitoring UI and Historical Retention"
 description: |
   Decision to provide a loopback-only Grafana UI over PCP metrics, with an optional Valkey history profile.
 status: draft
-version: 1.1
+version: 1.2
 updated: 2026-11-14
 ---
 
@@ -20,18 +20,18 @@ PCP can store history in Valkey or Redis through `pmproxy`. That storage adds me
 ## Affected paths
 
 - `infra/cloud-init/cloud-config.example.yaml` sections `PACKAGES`, `runcmd`, and `Start Services`
-- `configs/manifest.yaml`
-- `configs/pcp/`
-- `configs/grafana/`
-- `configs/valkey/`
-- `configs/systemd/pcp-openmetrics.conf`
-- `configs/systemd/grafana-server.service.d/`
-- `configs/systemd/valkey.service.d/`
-- `configs/traefik/traefik.yml`
-- `configs/traefik/dynamic/infra.yml`
-- `configs/authelia/configuration.yml`
-- `scripts/host/deploy/07-monitoring.sh`
-- `scripts/host/verify-stack.sh`
+- `infra/manifest.yaml`
+- `infra/configs/pcp/`
+- `infra/configs/grafana/`
+- `infra/configs/valkey/`
+- `infra/configs/systemd/pcp-openmetrics.conf`
+- `infra/configs/systemd/grafana-server.service.d/`
+- `infra/configs/systemd/valkey.service.d/`
+- `infra/configs/traefik/traefik.yml`
+- `infra/configs/traefik/dynamic/infra.yml`
+- `infra/configs/authelia/configuration.yml`
+- `infra/host/07-monitoring.sh`
+- `infra/host/verify-stack.sh`
 - `docs/reference/infrastructure.md` section 8
 - `docs/guides/getting-started.md` sections 1, 3, 4, 6, 8, and 10
 - `docs/guides/operations.md` sections 1, 2, 3, 4, 9, and 14

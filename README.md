@@ -15,10 +15,10 @@ The stack is designed but not yet proven in a deployment. See [docs/process/proj
 | **WireGuard (wg-easy)** | VPN for admin access; admin routes restricted to the VPN subnet                  |
 | **Cockpit**             | OS web console, reachable through Traefik behind Authelia and PAM                |
 | **Podman (Quadlet)**    | Container runtime for infrastructure and application services                    |
-| **PCP**                 | Performance Co-Pilot for host, container, and OpenMetrics collection            |
-| **Grafana**             | Local live monitoring UI over PCP, loopback-only, live profile                  |
-| **Valkey**              | PCP history store, loopback-only, history profile                               |
-| **Alert delivery**      | PCP pmie, systemd failure hooks, HTTPS webhook, external heartbeat              |
+| **PCP**                 | Performance Co-Pilot for host, container, and OpenMetrics collection             |
+| **Grafana**             | Local live monitoring UI over PCP, loopback-only, live profile                   |
+| **Valkey**              | PCP history store, loopback-only, history profile                                |
+| **Alert delivery**      | PCP pmie, systemd failure hooks, HTTPS webhook, external heartbeat               |
 
 All state, including certificates, user accounts, WireGuard keys, and container data, lives on a separately attached block volume. The VM is treated as disposable.
 
@@ -42,13 +42,13 @@ All state, including certificates, user accounts, WireGuard keys, and container 
 
    ```bash
    export $(cat .env | xargs)
-   scripts/repo/render-config.sh \
+   tools/render-config.sh \
      | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
      > cloud-config.yaml
    ```
 
 4. Launch the instance with `cloud-config.yaml` as user data and attach the block volume.
-5. After first boot, run `scripts/host/verify-stack.sh` as root from a repository checkout on the instance.
+5. After first boot, run `infra/host/verify-stack.sh` as root from a repository checkout on the instance.
 
 The complete sequence, including the first WireGuard peer bootstrap, is in [docs/guides/getting-started.md](docs/guides/getting-started.md).
 
@@ -80,17 +80,22 @@ The full security model, threat model, and non-goals are in [docs/architecture.m
 
 ## Repository layout
 
-| Path                                         | Purpose                                                       |
-| -------------------------------------------- | ------------------------------------------------------------- |
-| `infra/cloud-init/cloud-config.example.yaml` | Cloud-init template; render before deploying                  |
-| `configs/`                                   | Component configuration sources and manifest                  |
-| `scripts/repo/render-config.sh`              | Render component configuration into the cloud-config template |
-| `.env.example`                               | Variable template; copy to `.env` and fill in values          |
-| `scripts/host/deploy-service.sh`             | Deploy a new Podman container service                         |
-| `scripts/host/deploy/07-monitoring.sh`       | Install or change the local monitoring profile                |
-| `scripts/host/deploy/08-alerting.sh`         | Install or update alert delivery                              |
-| `scripts/host/verify-stack.sh`               | Post-deployment verification                                  |
-| `docs/`                                      | Design, decisions, guides, reference, and process records     |
+| Path                                         | Purpose                                                   |
+| -------------------------------------------- | --------------------------------------------------------- |
+| `infra/cloud-init/cloud-config.example.yaml` | Cloud-init template; render before deploying              |
+| `infra/manifest.yaml`                        | Machine-readable source and target mapping                |
+| `infra/config-index.md`                      | Deployment source layout and manifest reference           |
+| `infra/configs/`                             | Declarative component configuration sources               |
+| `infra/runtime/`                             | Executable assets staged into the cloud-init template     |
+| `infra/host/`                                | Host deployment and verification scripts                  |
+| `tools/render-config.sh`                     | Render deployment sources into the cloud-config template  |
+| `.env.example`                               | Variable template; copy to `.env` and fill in values      |
+| `infra/host/07-monitoring.sh`                | Install or change the local monitoring profile            |
+| `infra/host/08-alerting.sh`                  | Install or update alert delivery                          |
+| `infra/host/deploy-service.sh`               | Deploy a new Podman container service                     |
+| `infra/host/verify-stack.sh`                 | Post-deployment verification                              |
+| `tools/audit-docs.sh`                        | Audit document front matter, links, and reachability      |
+| `docs/`                                      | Design, decisions, guides, reference, and process records |
 
 ## Contributing
 

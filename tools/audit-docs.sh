@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
-DEFAULT_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
+DEFAULT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 readonly DEFAULT_ROOT
 readonly REQUIRED_FIELDS=(name description status version updated)
 readonly ALLOWED_STATUSES=(draft active legacy final superseded)

@@ -14,7 +14,7 @@
 #   2. Fill in all values in .env
 #   3. Run:
 #        export $(cat .env | xargs)
-#        scripts/repo/render-config.sh \
+#        tools/render-config.sh \
 #          | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
 #          > cloud-config.yaml
 #   4. Use cloud-config.yaml as instance user data
