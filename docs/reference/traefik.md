@@ -3,8 +3,8 @@ name: "Traefik Reference"
 description: |
   Exact Traefik static and dynamic configuration, systemd unit, binary update, backup, logging, audit, and SELinux settings for the host.
 status: draft
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # Traefik Reference
@@ -13,7 +13,7 @@ This page documents this stack's Traefik installation, configuration, and mainte
 
 ## 1. Traefik static configuration
 
-`/etc/traefik/traefik.yml`:
+`/etc/traefik/traefik.yaml`:
 
 ```yaml
 global:
@@ -208,7 +208,7 @@ http:
           - url: "http://127.0.0.1:51821"
 ```
 
-`passHostHeader: true` is required for Cockpit WebSocket support.
+`passHostHeader: true` is required for Cockpit WebSocket support. Cockpit also requires `/etc/cockpit/cockpit.conf` with an `Origins` entry for `https://cockpit.${DOMAIN}` and `ProtocolHeader = X-Forwarded-Proto`. The host must bind Cockpit to `127.0.0.1:9090` and block direct access to port 9090.
 
 The Traefik dashboard and metrics are not routed. They are bound to `127.0.0.1:8080` and `127.0.0.1:8082` and are reached through an SSH tunnel. The current implementation still routes them as `traefik.${DOMAIN}` and `metrics.${DOMAIN}`. Findings F6 and F8 record that contradiction.
 
@@ -228,7 +228,7 @@ Type=simple
 User=traefik
 Group=traefik
 EnvironmentFile=/etc/traefik/env
-ExecStart=/opt/traefik/bin/traefik --configfile=/etc/traefik/traefik.yml
+ExecStart=/opt/traefik/bin/traefik --configFile=/etc/traefik/traefik.yaml
 Restart=on-failure
 RestartSec=5
 
@@ -291,7 +291,7 @@ sudo install -m 0600 -o traefik -g traefik /dev/null /etc/traefik/env
 CF_DNS_API_TOKEN=replace-with-token-from-oci-vault
 ```
 
-The file must be owned by `traefik:traefik` and mode `0600`. The token must not appear in `traefik.yml`.
+The file must be owned by `traefik:traefik` and mode `0600`. The token must not appear in `traefik.yaml`.
 
 ## 5. Traefik binary update script
 

@@ -3,13 +3,13 @@ name: "Decision Records"
 description: |
   Index of architecture decision records for the OCI secure stack.
 status: active
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # Decision Records
 
-Each record states the context, the decision, and the consequences. A decision is authoritative only after it is tracked in git and confirmed by the project owner (the repository maintainer). All current records are drafts.
+Each record states the context, the affected paths, the current text or behavior, and the contradiction. It also states the options, the consequence of each option, the recommendation, the decision, and the consequences. A decision is authoritative only after it is tracked in git and confirmed by the project owner (the repository maintainer). All current records are drafts.
 
 | ID      | Title                                | Status | File                                                                               |
 | ------- | ------------------------------------ | ------ | ---------------------------------------------------------------------------------- |
@@ -23,7 +23,7 @@ Each record states the context, the decision, and the consequences. A decision i
 | ADR-008 | Traefik runtime                      | Draft  | [008-traefik-runtime.md](008-traefik-runtime.md)                                   |
 | ADR-009 | Infrastructure container runtime     | Draft  | [009-infrastructure-container-runtime.md](009-infrastructure-container-runtime.md) |
 
-ADR-006, ADR-007, and ADR-009 are draft. Their open questions are recorded in the decision files.
+ADR-006 and ADR-007 are draft. ADR-009 is decided in content and remains draft until committed and confirmed.
 
 ## Open decision questions
 

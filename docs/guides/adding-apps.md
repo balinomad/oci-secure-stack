@@ -639,7 +639,7 @@ sudo systemctl daemon-reload
      --domain <domain>
    ```
 
-4. Add the Cloudflare DNS record. Use DNS Only, grey cloud.
+4. Confirm the wildcard DNS record covers `<domain>`. Add a specific DNS Only record only if it does not.
 5. Verify:
 
    ```bash

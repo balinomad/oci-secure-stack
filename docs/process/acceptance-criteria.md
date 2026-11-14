@@ -3,13 +3,13 @@ name: "Acceptance Criteria"
 description: |
   Acceptance checklist for proving a deployment, covering prerequisites, boot, services, security, recovery, and release criteria.
 status: active
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # Acceptance Criteria
 
-A deployment is complete only when every item is proven with evidence. Mark `Claimed` items as unproven until an execution log or test result exists. The success criteria are defined in `docs/architecture.md`.
+A deployment is complete only when every item is proven with evidence. Mark `Claimed` items as unproven until an execution log or test result exists. `Claimed` means the same state as `Needs verification` in `docs/process/issue-log.md`. The success criteria are defined in `docs/architecture.md`.
 
 Evidence source: command output, log excerpt, test screenshot, or a linked finding.
 
@@ -43,10 +43,10 @@ Evidence source: command output, log excerpt, test screenshot, or a linked findi
 | S1  | Traefik is active and listens on 80 and 443           | `systemctl`, `ss -lntp`                        | Claimed |
 | S2  | HTTP redirects to HTTPS                               | `curl -I`                                      | Claimed |
 | S3  | Certificates are issued for every configured hostname | `acme.json`, `openssl s_client`                | Claimed |
-| S4  | Authelia starts and exposes its health endpoint       | `journalctl`, local `curl`                     | Claimed |
+| S4  | Authelia starts and exposes its health endpoint       | User-unit journal, local `curl`                | Claimed |
 | S5  | Authelia login and TOTP succeed                       | Browser test                                   | Claimed |
 | S6  | Authelia data persists across restart and replacement | Restart and replacement test                   | Claimed |
-| S7  | wg-easy starts and serves its UI on localhost         | `systemctl`, local `curl`                      | Claimed |
+| S7  | wg-easy starts and serves its UI on localhost         | `systemctl`, local `curl`, `podman inspect`    | Claimed |
 | S8  | The first peer is created and the tunnel handshakes   | `podman exec wg-easy wg show`, `ping 10.0.0.1` | Claimed |
 | S9  | Cockpit is active and reachable through Traefik       | Browser test                                   | Claimed |
 | S10 | Cockpit WebSocket terminal works through Traefik      | Browser test                                   | Claimed |
@@ -67,6 +67,8 @@ Evidence source: command output, log excerpt, test screenshot, or a linked findi
 | X8  | SSH is closed after the first peer is verified                         | OCI security list            | Claimed |
 | X9  | Secrets are absent from templates, manifests, and world-readable files | Config review                | Claimed |
 | X10 | Vault fetch failure prevents boot rather than degrading silently       | Negative test                | Claimed |
+| X11 | Authelia runs as a rootless user unit                                  | User unit, `/etc/subuid`     | Claimed |
+| X12 | wg-easy uses a user namespace without SYS_MODULE                       | Podman inspect output        | Claimed |
 
 ## 5. Disposability and recovery
 
@@ -82,14 +84,14 @@ Evidence source: command output, log excerpt, test screenshot, or a linked findi
 
 ## 6. Documentation and release
 
-| ID  | Criterion                                                  | Evidence                                      | Status  |
-| --- | ---------------------------------------------------------- | --------------------------------------------- | ------- |
-| D1  | A new operator can deploy from tracked documentation alone | Fresh-read test                               | Claimed |
-| D2  | Documentation matches tested behaviour                     | Cross-check                                   | Claimed |
-| D3  | README claims are accurate and dated                       | Review                                        | Claimed |
-| D4  | All documentation links resolve                            | `scripts/repo/audit-docs.sh` exits 0          | Proven  |
-| D5  | A release tag and changelog exist                          | `git tag`, `CHANGELOG.md`                     | Claimed |
-| D6  | Version pins are documented and verified                   | Release notes                                 | Claimed |
+| ID  | Criterion                                                  | Evidence                             | Status  |
+| --- | ---------------------------------------------------------- | ------------------------------------ | ------- |
+| D1  | A new operator can deploy from tracked documentation alone | Fresh-read test                      | Claimed |
+| D2  | Documentation matches tested behaviour                     | Cross-check                          | Claimed |
+| D3  | README claims are accurate and dated                       | Review                               | Claimed |
+| D4  | All documentation links resolve                            | `scripts/repo/audit-docs.sh` exits 0 | Proven  |
+| D5  | A release tag and changelog exist                          | `git tag`, `CHANGELOG.md`            | Claimed |
+| D6  | Version pins are documented and verified                   | Release notes                        | Claimed |
 
 ## Sign-off
 

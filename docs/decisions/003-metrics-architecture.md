@@ -3,8 +3,8 @@ name: "ADR-003: Metrics Architecture"
 description: |
   Decision to use PCP-native metrics export instead of a full Prometheus server, with all endpoints bound to loopback.
 status: draft
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # ADR-003: Metrics Architecture
@@ -12,6 +12,36 @@ updated: 2026-11-12
 ## Context
 
 A full Prometheus server, TSDB, and Alertmanager are redundant for an instance that fits within the Oracle Cloud Free Tier Always Free services limits. PCP is available on Oracle Linux 9 and can expose a Prometheus-compatible endpoint. The current implementation routes metrics through Traefik, which finding F8 records as incorrect.
+
+## Affected paths
+
+- `infra/cloud-init/cloud-config.example.yaml:163-180`
+- `docs/reference/traefik.md:12-80`
+- `docs/process/issue-log.md` F8
+
+## Current text or behavior
+
+The template routes metrics through the Traefik metrics entrypoint and creates a `metrics.` hostname. It does not export host metrics through PCP.
+
+## Contradiction
+
+The design requires PCP host metrics on a loopback endpoint and no public `metrics.` route. The implementation routes metrics through Traefik and does not export host metrics.
+
+## Options
+
+1. Keep the Traefik self-metrics route and the `metrics.` hostname.
+2. Expose PCP metrics on a loopback endpoint, keep Traefik internal metrics on loopback, and remove the public route.
+3. Deploy a full Prometheus server, TSDB, and Alertmanager.
+
+## Consequences of each option
+
+- Option 1: the public metrics route remains. F8 remains open, and host metrics are unavailable.
+- Option 2: there is no long-term TSDB and no built-in alerting. Operators use PCP or an SSH tunnel, and the metrics route is removed.
+- Option 3: full metrics and alerting are available. Resource use and operational overhead increase, and the capacity is unnecessary for the Free Tier instance.
+
+## Recommendation
+
+Adopt option 2.
 
 ## Decision
 

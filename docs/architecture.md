@@ -3,8 +3,8 @@ name: "Architecture"
 description: |
   Project purpose, goals, principles, constraints, system architecture, security model, risks, and decision index for the OCI secure stack.
 status: draft
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # Architecture
@@ -162,14 +162,16 @@ WireGuard and Traefik are parallel services. WireGuard provides the encrypted tu
 | ----------------- | -------------------------------------- | ---------------- | ----------------- |
 | Traefik           | Edge router, TLS termination, routing  | 80, 443 public   | None              |
 | WireGuard         | VPN tunnel for admin access            | 51820/UDP public | Peer public key   |
-| Authelia          | SSO and MFA gateway for admin routes   | Internal, Podman | None              |
+| Authelia          | SSO and MFA gateway for admin routes   | Loopback 9091    | None              |
 | Traefik dashboard | Router, middleware, service inspection | Loopback only    | SSH tunnel        |
 | Traefik metrics   | Prometheus metrics endpoint            | Loopback only    | SSH tunnel        |
 | Cockpit           | Full OS web console                    | Through Traefik  | Authelia plus PAM |
 | wg-easy           | WireGuard peer management UI           | Through Traefik  | Authelia          |
 | Podman containers | Application workloads                  | Per application  | Per application   |
 
-The exposure model is defined in ADR-001. The design binds the dashboard and raw metrics to loopback. The design binds Cockpit to loopback and proxies it through Traefik behind Authelia and PAM. The current implementation does not yet satisfy this model; findings F6 and F9 record the gaps. Any future management-plane exposure requires a new ADR.
+Authelia runs as a rootless Quadlet user unit. wg-easy runs as a rootful Quadlet system unit inside a user namespace with only `NET_ADMIN` and `NET_RAW`. Traefik runs as a native systemd service. See ADR-002, ADR-008, and ADR-009.
+
+The exposure model is defined in ADR-001. The design binds the dashboard and raw metrics to loopback. The design binds Cockpit to loopback and proxies it through Traefik behind Authelia and PAM. The current implementation does not yet satisfy this model; findings F6, F8, and F9 record the gaps. Any future management-plane exposure requires a new ADR.
 
 ### Traffic flows
 
@@ -243,7 +245,7 @@ This stack does not protect against:
 - A compromised OCI account. An attacker can read Vault secrets or connect to the instance directly.
 - Peer key theft. A stolen WireGuard private key grants VPN access until the peer is revoked.
 - Traefik vulnerabilities. Monitor the Traefik security advisories and keep Traefik updated.
-- Container breakout. Authelia and wg-easy run as rootful Podman containers. Application containers run rootful by default in the current implementation. Keep images updated. Avoid privileged containers.
+- Container breakout. Authelia runs rootless. wg-easy runs rootful inside a user namespace with only `NET_ADMIN` and `NET_RAW`. Application containers follow ADR-005. These isolation boundaries are unverified until a deployment test. Keep images updated. Avoid privileged containers.
 
 ## Quality and acceptance
 
@@ -260,7 +262,7 @@ Version 1.0 is complete when:
 
 Open findings and technical debt are tracked in `docs/process/issue-log.md`. The principal current risks are:
 
-- The first deployment may fail at Authelia because of file ownership versus container UID.
+- The first deployment may fail at Authelia because of rootless ownership, subordinate ID allocation, or SELinux relabel.
 - A failed block volume mount may silently produce an ephemeral deployment.
 - The implemented admin exposure model may bypass the stated security model.
 - The refactor may proceed before behaviour is proven.
@@ -282,7 +284,7 @@ These risks are not confirmed runtime failures until a deployment test produces 
 | ADR-008 | Traefik runtime                      | Draft  |
 | ADR-009 | Infrastructure container runtime     | Draft  |
 
-ADR-006, ADR-007, and ADR-009 are draft. Their open questions are recorded in the decision files.
+ADR-006 and ADR-007 remain draft. ADR-009 is decided in content and remains draft until committed and confirmed.
 
 ## Related documents
 

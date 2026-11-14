@@ -3,8 +3,8 @@ name: "Infrastructure Reference"
 description: |
   Exact template variables, OCI network rules, DNS records, Vault secrets, persistent storage layout, and reserved ports for the stack.
 status: draft
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # Infrastructure Reference
@@ -84,10 +84,10 @@ Cloud-init detects the block device in this order: `/dev/oracleoci/oraclevdb`, `
 ├── authelia/
 │   ├── config/              # configuration and users database
 │   ├── db/                  # SQLite database
-│   └── logs/                # Authelia logs
+│   └── env                  # secrets, PUID/PGID, and UMASK, mode 0600
 ├── apps/                    # application deployment manifests
 ├── containers/
-│   ├── wg-easy/             # WireGuard keys and peer data
+│   ├── wg-easy/             # WireGuard keys and peer data, owner 300000
 │   └── <app-name>/          # per-application data
 └── logs/
     └── traefik/             # Traefik access and error logs
@@ -100,7 +100,17 @@ Symlinks:
 /var/log/traefik          ->  /data/logs/traefik
 ```
 
-Authelia and wg-easy bind-mount their data directly from `/data/`.
+Authelia and wg-easy bind-mount their data directly from `/data/`. `/data/authelia` is owned by `authelia:authelia`. `/data/containers/wg-easy` is owned by host UID and GID `300000`.
+
+### 5.1 Service accounts and Quadlet paths
+
+| Account  | Host user    | ID mapping                             | Service                                         |
+| -------- | ------------ | -------------------------------------- | ----------------------------------------------- |
+| authelia | System user  | Subordinate `400000-465535`            | Rootless Quadlet user unit                      |
+| traefik  | System user  | None                                   | Native systemd service                          |
+| wg-easy  | No host user | Container root to host `300000-365535` | Rootful Quadlet system unit in a user namespace |
+
+Authelia's user manager starts at boot through lingering. Its Quadlet unit is `/etc/containers/systemd/users/<authelia-uid>/authelia.container`. The wg-easy unit is `/etc/containers/systemd/wg-easy.container`. The template installs both units. A deployment test must prove generation and startup.
 
 What persists across VM replacement:
 
@@ -119,10 +129,20 @@ The OS, Traefik binary, and container images are recreated.
 | 443   | Traefik HTTPS                        |
 | 8080  | Traefik dashboard and API, loopback  |
 | 8082  | Traefik Prometheus metrics, loopback |
-| 9090  | Cockpit                              |
+| 9090  | Cockpit, loopback                    |
 | 9091  | Authelia                             |
 | 51820 | WireGuard, UDP                       |
 | 51821 | wg-easy management UI                |
+
+## 7. Host packages
+
+The Cockpit web console uses three host packages:
+
+| Package            | Purpose                          |
+| ------------------ | -------------------------------- |
+| `cockpit`          | Web console                      |
+| `cockpit-storaged` | Storage management page          |
+| `cockpit-podman`   | Podman container management page |
 
 ## Related documents
 
