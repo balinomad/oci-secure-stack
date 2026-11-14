@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Component manifest",
+  "description": "Schema for infra/manifest.yaml. The manifest lists deployed components, the actual target architecture, resolver metadata, repository-authored files, and runtime-generated secret files. It contains no secret values.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "architecture", "components"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "Manifest format version. The validator rejects any other value."
+    },
+    "architecture": {
+      "type": "string",
+      "enum": ["amd64", "arm64"],
+      "description": "Actual target architecture. The enum defines the supported set."
+    },
+    "components": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/component"
+      }
+    }
+  },
+  "$defs": {
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S+$",
+          "description": "Version constraint for the component. Semver components use ^ or ~; pinned components use an exact value. Components managed by the OS package manager use unpinned."
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Repository-authored files copied to host paths.",
+          "items": {
+            "$ref": "#/$defs/file"
+          }
+        },
+        "secrets": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Runtime-generated secret files. The manifest declares targets and required key names, never values.",
+          "items": {
+            "$ref": "#/$defs/secret"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "version": {
+                "const": "unpinned"
+              }
+            },
+            "required": ["version"]
+          },
+          "then": {
+            "not": {
+              "required": ["source"]
+            }
+          },
+          "else": {
+            "required": ["source"]
+          }
+        }
+      ]
+    },
+    "source": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/githubReleaseSource"
+        },
+        {
+          "$ref": "#/$defs/ociImageSource"
+        }
+      ]
+    },
+    "githubReleaseSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "repository", "asset"],
+      "properties": {
+        "type": {
+          "const": "github-release"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "description": "GitHub repository in owner/name form."
+        },
+        "asset": {
+          "type": "string",
+          "minLength": 1,
+          "allOf": [
+            {
+              "pattern": "\\$\\{version\\}"
+            },
+            {
+              "pattern": "\\$\\{arch\\}"
+            }
+          ],
+          "description": "Release asset name template. It must contain ${version} and ${arch}."
+        },
+        "checksums": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\$\\{version\\}",
+          "description": "Optional checksum file URL template. It must contain ${version}."
+        }
+      }
+    },
+    "ociImageSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "image"],
+      "properties": {
+        "type": {
+          "const": "oci-image"
+        },
+        "image": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*(/[A-Za-z0-9][A-Za-z0-9_.-]*)+$",
+          "description": "Image repository without a tag or digest."
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "target", "owner", "mode"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/]",
+          "not": {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          },
+          "description": "Repository-relative source path."
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^/",
+          "not": {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          },
+          "description": "Absolute host path."
+        },
+        "owner": {
+          "$ref": "#/$defs/owner"
+        },
+        "mode": {
+          "$ref": "#/$defs/mode"
+        }
+      }
+    },
+    "secret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "owner", "mode", "keys"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "pattern": "^/",
+          "not": {
+            "pattern": "(^|/)\\.\\.(/|$)"
+          },
+          "description": "Absolute host path."
+        },
+        "owner": {
+          "$ref": "#/$defs/owner"
+        },
+        "mode": {
+          "$ref": "#/$defs/mode"
+        },
+        "keys": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Required environment key names. No values.",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z_][A-Z0-9_]*$"
+          }
+        }
+      }
+    },
+    "owner": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+$",
+      "description": "Host user and group, for example traefik:traefik or 300000:300000."
+    },
+    "mode": {
+      "type": "string",
+      "pattern": "^[0-7]{4}$",
+      "description": "Four-digit octal file mode, for example 0644."
+    }
+  }
+}

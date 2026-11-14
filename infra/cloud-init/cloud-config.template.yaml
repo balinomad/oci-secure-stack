@@ -118,6 +118,38 @@ write_files:
 # ======================= RUN COMMANDS =========================
 runcmd:
   # -----------------------------------------------------------
+  # Target Architecture Preflight
+  # The manifest declares the target architecture. Fail before
+  # changing the host when the instance architecture does not match.
+  # -----------------------------------------------------------
+  - |
+    set -e
+    # BEGIN GENERATED TARGET ARCHITECTURE
+    # END GENERATED TARGET ARCHITECTURE
+    case "$(uname -m)" in
+      x86_64)
+        HOST_ARCH="amd64"
+        ;;
+      aarch64)
+        HOST_ARCH="arm64"
+        ;;
+      *)
+        echo "Unsupported architecture: $(uname -m)" >&2
+        exit 1
+        ;;
+    esac
+    if [ "$HOST_ARCH" != "$TARGET_ARCH" ]; then
+      echo "Manifest architecture $TARGET_ARCH does not match host $HOST_ARCH" >&2
+      exit 1
+    fi
+    echo "Target architecture $TARGET_ARCH matches host."
+    install -d -m 0755 /etc/secure-stack
+    cat > /etc/secure-stack/images.env <<'IMAGES'
+    # BEGIN GENERATED LOCKED IMAGES
+    # END GENERATED LOCKED IMAGES
+    IMAGES
+
+  # -----------------------------------------------------------
   # Boot Volume Expansion
   # OCI instances are provisioned with a base image that may not
   # use all available boot volume space. oci-growfs expands the
@@ -218,7 +250,8 @@ runcmd:
     dnf module enable -y container-tools:ol9 || dnf module enable -y container-tools
     dnf install -y podman buildah skopeo fuse-overlayfs slirp4netns
 
-    podman pull ghcr.io/wg-easy/wg-easy:15
+    . /etc/secure-stack/images.env
+    podman pull "$WG_EASY_IMAGE"
 
     AUTHELIA_UID=$(id -u authelia)
     install -d -m 0700 -o authelia -g authelia /home/authelia
@@ -250,7 +283,7 @@ runcmd:
     fi
 
     runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
-      podman pull authelia/authelia:4.39
+      podman pull "$AUTHELIA_IMAGE"
 
   # -----------------------------------------------------------
   # Fetch Secrets from OCI Vault (Instance Principal auth)
@@ -393,6 +426,7 @@ runcmd:
   # -----------------------------------------------------------
   - |
     set -e
+    . /etc/secure-stack/images.env
     AUTHELIA_UID=$(id -u authelia)
     AUTHELIA_GID=$(id -g authelia)
 
@@ -428,7 +462,7 @@ runcmd:
     if [ ! -f /data/authelia/config/users_database.yaml ]; then
       AUTHELIA_ADMIN_PASS=$(cat /run/authelia-bootstrap.tmp)
       PASS_HASH=$(runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
-        podman run --rm authelia/authelia:4.39 \
+        podman run --rm "$AUTHELIA_IMAGE" \
         authelia crypto hash generate argon2 --password "$AUTHELIA_ADMIN_PASS" \
         | grep 'Digest:' | awk '{print $2}')
       rm -f /run/authelia-bootstrap.tmp
@@ -481,6 +515,10 @@ runcmd:
     # be owned by that mapping.
     chown -R 300000:300000 /data/containers/wg-easy
     chmod 700 /data/containers/wg-easy
+    . /etc/secure-stack/images.env
+    install -d -m 0755 /etc/containers/systemd/wg-easy.container.d
+    printf 'Image=%s\n' "$WG_EASY_IMAGE" \
+      > /etc/containers/systemd/wg-easy.container.d/10-image.conf
     # Always clean up — tmpfs file must not persist regardless of whether
     # the env file was newly created or already existed from a prior deploy
     rm -f /run/wg-bootstrap.tmp
@@ -515,6 +553,11 @@ runcmd:
     install -d -m 0755 "/etc/containers/systemd/users/${AUTHELIA_UID}"
     install -m 0644 /etc/authelia/authelia.container \
       "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container"
+    . /etc/secure-stack/images.env
+    install -d -m 0755 \
+      "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container.d"
+    printf 'Image=%s\n' "$AUTHELIA_IMAGE" \
+      > "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container.d/10-image.conf"
     systemctl daemon-reload
     runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
       systemctl --user daemon-reload
@@ -536,24 +579,28 @@ runcmd:
   # -----------------------------------------------------------
   - |
     set -e
-    . /etc/traefik/release.env
-    ARCH=$(uname -m)
-    case "$ARCH" in
+    # BEGIN GENERATED TRAEFIK RELEASE
+    # END GENERATED TRAEFIK RELEASE
+    HOST_ARCH=$(uname -m)
+    case "$HOST_ARCH" in
       x86_64)
-        TRAEFIK_ARCH="amd64"
-        TRAEFIK_SHA256="${TRAEFIK_SHA256_AMD64}"
+        HOST_ARCH="amd64"
         ;;
       aarch64)
-        TRAEFIK_ARCH="arm64"
-        TRAEFIK_SHA256="${TRAEFIK_SHA256_ARM64}"
+        HOST_ARCH="arm64"
         ;;
       *)
-        echo "Unsupported architecture: $ARCH"
+        echo "Unsupported architecture: $HOST_ARCH"
         exit 1
         ;;
     esac
+    if [ "$HOST_ARCH" != "$TRAEFIK_ARCH" ]; then
+      echo "Traefik lock architecture $TRAEFIK_ARCH does not match host $HOST_ARCH"
+      exit 1
+    fi
     TMP_TRAEFIK=$(mktemp)
-    curl -fsSL "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${TRAEFIK_ARCH}.tar.gz" \
+    curl -fsSL \
+      "https://github.com/${TRAEFIK_REPOSITORY}/releases/download/${TRAEFIK_VERSION}/${TRAEFIK_ASSET}" \
       -o "$TMP_TRAEFIK"
     printf '%s  %s\n' "$TRAEFIK_SHA256" "$TMP_TRAEFIK" | sha256sum -c -
     tar -xzf "$TMP_TRAEFIK" -C /usr/local/bin/ traefik

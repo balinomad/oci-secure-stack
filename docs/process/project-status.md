@@ -3,7 +3,7 @@ name: "Project Status Report"
 description: |
   Static assessment of repository state, documentation state, implementation status, risks, and explicit non-claims.
 status: active
-version: 1.7
+version: 1.8
 updated: 2026-11-14
 ---
 
@@ -30,17 +30,17 @@ This report covers the project defined in `docs/architecture.md`. It records rep
 
 ## Repository state
 
-| Area                   | State                               | Evidence                                                                                             |
-| ---------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Cloud-init template    | Template with generated markers     | `infra/cloud-init/cloud-config.example.yaml`                                                         |
-| Verification script    | Non-empty, shellcheck clean         | `infra/host/verify-stack.sh`; `shellcheck infra/host/verify-stack.sh`                                |
-| Deployment script      | Non-empty, shellcheck clean         | `infra/host/deploy-service.sh`; `shellcheck infra/host/deploy-service.sh`                            |
+| Area                   | State                               | Evidence                                                                                   |
+| ---------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------ |
+| Cloud-init template    | Template with generated markers     | `infra/cloud-init/cloud-config.template.yaml`                                              |
+| Verification script    | Non-empty, shellcheck clean         | `infra/host/verify-stack.sh`; `shellcheck infra/host/verify-stack.sh`                      |
+| Deployment script      | Non-empty, shellcheck clean         | `infra/host/deploy-service.sh`; `shellcheck infra/host/deploy-service.sh`                  |
 | Modular deploy scripts | Partial                             | `00-02` and `06` empty; `03-traefik`, `04-authelia`, `07-monitoring`, `08-alerting` active |
-| Extracted configs      | Populated, manifest and renderer    | `infra/manifest.yaml`; `tools/render-config.sh --check`                                              |
-| Documentation          | Consolidated, no empty placeholders | `README.md`, `docs/`                                                                                 |
-| Planning and research  | Substantive, kept as evidence       | `tmp/unverified/`, `tmp/legacy/work-plan.md`                                                         |
-| CI                     | None                                | `.github/workflows` empty                                                                            |
-| Changelog or releases  | None                                | No `CHANGELOG.md`, no tags                                                                           |
+| Extracted configs      | Populated, manifest and renderer    | `infra/manifest.yaml`; `tools/render-config.sh --check`                                    |
+| Documentation          | Consolidated, no empty placeholders | `README.md`, `docs/`                                                                       |
+| Planning and research  | Substantive, kept as evidence       | `tmp/unverified/`, `tmp/legacy/work-plan.md`                                               |
+| CI                     | None                                | `.github/workflows` empty                                                                  |
+| Changelog or releases  | None                                | No `CHANGELOG.md`, no tags                                                                 |
 
 ## Git state
 

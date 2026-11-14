@@ -1,608 +1,265 @@
-# Deployment source manifest.
-# tools/render-config.sh reads this file and maps the source tree to
-# host paths. stage: true means the renderer emits a write_files entry.
-# Do not store secret values in this file.
+# Component manifest.
+# tools/render-config.sh maps component files to host paths.
+# tools/update-lock.sh resolves source blocks for lockable components.
+# Every files entry is rendered into the cloud-config template.
+# Secrets are generated on the host and contain no values here.
 version: 1
+architecture: amd64
 
-files:
-  - source: infra/configs/traefik/traefik.yml
-    target: /etc/traefik/traefik.yaml
-    owner: traefik:traefik
-    mode: "0644"
-    format: yaml
-    validate: traefik
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
+components:
+  alerting:
+    version: "unpinned"
+    files:
+      - source: infra/runtime/alerting/alerting.sh
+        target: /usr/local/libexec/stack-alerting
+        owner: root:root
+        mode: "0755"
+      - source: infra/configs/alerting/services.list
+        target: /etc/pcp/alerting/services.list
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/pcp/pmie/stack-alerts.pmie
+        target: /etc/pcp/pmie/stack-alerts.pmie
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-alerting.conf
+        target: /etc/tmpfiles.d/pcp-alerting.conf
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-alert-pmie.service
+        target: /etc/systemd/system/pcp-alert-pmie.service
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-alert-notify@.service
+        target: /etc/systemd/system/pcp-alert-notify@.service
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-service-check.service
+        target: /etc/systemd/system/pcp-service-check.service
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-service-check.timer
+        target: /etc/systemd/system/pcp-service-check.timer
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-cert-check.service
+        target: /etc/systemd/system/pcp-cert-check.service
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-cert-check.timer
+        target: /etc/systemd/system/pcp-cert-check.timer
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-heartbeat.service
+        target: /etc/systemd/system/pcp-heartbeat.service
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-heartbeat.timer
+        target: /etc/systemd/system/pcp-heartbeat.timer
+        owner: root:root
+        mode: "0644"
+    secrets:
+      - target: /data/monitoring/alerting/env
+        owner: alerting:alerting
+        mode: "0600"
+        keys:
+          - ALERT_WEBHOOK_URL
+          - ALERT_HEARTBEAT_URL
 
-  - source: infra/configs/traefik/dynamic/infra.yml
-    target: /etc/traefik/config/infra.yaml
-    owner: traefik:traefik
-    mode: "0644"
-    format: yaml
-    validate: traefik
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
+  authelia:
+    version: "^4.39.28"
+    source:
+      type: oci-image
+      image: authelia/authelia
+    files:
+      - source: infra/configs/authelia/configuration.yml
+        target: /etc/authelia/configuration.yml
+        owner: root:root
+        mode: "0600"
+      - source: infra/configs/podman/authelia.container
+        target: /etc/authelia/authelia.container
+        owner: root:root
+        mode: "0644"
+    secrets:
+      - target: /data/authelia/env
+        owner: authelia:authelia
+        mode: "0600"
+        keys:
+          - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET
+          - AUTHELIA_SESSION_SECRET
+          - AUTHELIA_STORAGE_ENCRYPTION_KEY
+          - PUID
+          - PGID
+          - UMASK
 
-  - source: infra/configs/traefik/dynamic/cockpit.yml
-    target: /etc/traefik/config/cockpit.yaml
-    owner: traefik:traefik
-    mode: "0644"
-    format: yaml
-    validate: traefik
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
+  cockpit:
+    version: "unpinned"
+    files:
+      - source: infra/configs/cockpit/cockpit.conf
+        target: /etc/cockpit/cockpit.conf
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/cockpit.socket.d/listen.conf
+        target: /etc/systemd/system/cockpit.socket.d/listen.conf
+        owner: root:root
+        mode: "0644"
 
-  - source: infra/configs/traefik/env.example
-    target: /etc/traefik/env
-    owner: traefik:traefik
-    mode: "0600"
-    format: text
-    validate: null
-    secret: true
-    generated: true
-    enabled: true
-    stage: true
-    status: active
+  grafana:
+    version: "unpinned"
+    files:
+      - source: infra/configs/grafana/grafana.ini
+        target: /etc/grafana/grafana.ini
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/grafana/provisioning/datasources/pcp.yml
+        target: /etc/grafana/provisioning/datasources/pcp.yml
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/grafana/provisioning/dashboards/stack.yml
+        target: /etc/grafana/provisioning/dashboards/stack.yml
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/grafana/dashboards/stack-overview.json
+        target: /etc/grafana/dashboards/stack-overview.json
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/grafana-server.service.d/env.conf
+        target: /etc/systemd/system/grafana-server.service.d/env.conf
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/grafana-server.service.d/data.conf
+        target: /etc/systemd/system/grafana-server.service.d/data.conf
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/grafana-server.service.d/onfailure.conf
+        target: /etc/systemd/system/grafana-server.service.d/onfailure.conf
+        owner: root:root
+        mode: "0644"
+    secrets:
+      - target: /data/monitoring/grafana/env
+        owner: grafana:grafana
+        mode: "0600"
+        keys:
+          - GF_SECURITY_ADMIN_PASSWORD
 
-  - source: infra/configs/traefik/logrotate.conf
-    target: /etc/logrotate.d/traefik
-    owner: root:root
-    mode: "0644"
-    format: text
-    validate: logrotate
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
+  pcp:
+    version: "unpinned"
+    files:
+      - source: infra/configs/pcp/pmproxy.env
+        target: /etc/sysconfig/pmproxy
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/pcp/openmetrics/traefik.url
+        target: /etc/pcp/openmetrics/traefik.url
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pcp-openmetrics.conf
+        target: /etc/tmpfiles.d/pcp-openmetrics.conf
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pmcd.service.d/onfailure.conf
+        target: /etc/systemd/system/pmcd.service.d/onfailure.conf
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pmlogger.service.d/onfailure.conf
+        target: /etc/systemd/system/pmlogger.service.d/onfailure.conf
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/pmproxy.service.d/onfailure.conf
+        target: /etc/systemd/system/pmproxy.service.d/onfailure.conf
+        owner: root:root
+        mode: "0644"
 
-  - source: infra/configs/systemd/traefik.service
-    target: /etc/systemd/system/traefik.service
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: systemd-analyze verify
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
+  traefik:
+    version: "^3.7.19"
+    source:
+      type: github-release
+      repository: traefik/traefik
+      asset: "traefik_${version}_linux_${arch}.tar.gz"
+      checksums: "https://github.com/traefik/traefik/releases/download/${version}/traefik_${version}_checksums.txt"
+    files:
+      - source: infra/configs/traefik/traefik.yml
+        target: /etc/traefik/traefik.yaml
+        owner: traefik:traefik
+        mode: "0644"
+      - source: infra/configs/traefik/dynamic/infra.yml
+        target: /etc/traefik/config/infra.yaml
+        owner: traefik:traefik
+        mode: "0644"
+      - source: infra/configs/traefik/dynamic/cockpit.yml
+        target: /etc/traefik/config/cockpit.yaml
+        owner: traefik:traefik
+        mode: "0644"
+      - source: infra/configs/traefik/logrotate.conf
+        target: /etc/logrotate.d/traefik
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/traefik.service
+        target: /etc/systemd/system/traefik.service
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/traefik.service.d/onfailure.conf
+        target: /etc/systemd/system/traefik.service.d/onfailure.conf
+        owner: root:root
+        mode: "0644"
+    secrets:
+      - target: /etc/traefik/env
+        owner: traefik:traefik
+        mode: "0600"
+        keys:
+          - CF_DNS_API_TOKEN
 
-  - source: infra/configs/authelia/configuration.yml
-    target: /etc/authelia/configuration.yml
-    runtime_target: /data/authelia/config/configuration.yml
-    owner: root:root
-    mode: "0600"
-    format: yaml
-    validate: authelia
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
+  valkey:
+    version: "unpinned"
+    files:
+      - source: infra/configs/valkey/valkey.conf
+        target: /etc/valkey/valkey.conf
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/valkey.service.d/data.conf
+        target: /etc/systemd/system/valkey.service.d/data.conf
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/valkey.service.d/onfailure.conf
+        target: /etc/systemd/system/valkey.service.d/onfailure.conf
+        owner: root:root
+        mode: "0644"
 
-  - source: infra/configs/authelia/env.example
-    target: /data/authelia/env
-    owner: authelia:authelia
-    mode: "0600"
-    format: text
-    validate: null
-    secret: true
-    generated: true
-    enabled: true
-    stage: false
-    status: active
+  wg-easy:
+    version: "^15.5.0"
+    source:
+      type: oci-image
+      image: ghcr.io/wg-easy/wg-easy
+    files:
+      - source: infra/configs/podman/wg-easy.container
+        target: /etc/containers/systemd/wg-easy.container
+        owner: root:root
+        mode: "0644"
+      - source: infra/configs/systemd/wg-easy.service.d/onfailure.conf
+        target: /etc/systemd/system/wg-easy.service.d/onfailure.conf
+        owner: root:root
+        mode: "0644"
+    secrets:
+      - target: /data/containers/wg-easy/env
+        owner: "300000:300000"
+        mode: "0600"
+        keys:
+          - PORT
+          - INSECURE
+          - INIT_ENABLED
+          - INIT_USERNAME
+          - INIT_PASSWORD
+          - INIT_HOST
+          - INIT_PORT
+          - INIT_DNS
+          - INIT_IPV4_CIDR
+          - INIT_IPV6_CIDR
+          - INIT_ALLOWED_IPS
 
-  - source: infra/configs/podman/authelia.container
-    target: /etc/authelia/authelia.container
-    runtime_target: /etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container
-    owner: root:root
-    mode: "0644"
-    format: quadlet
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/cockpit/cockpit.conf
-    target: /etc/cockpit/cockpit.conf
-    owner: root:root
-    mode: "0644"
-    format: ini
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/cockpit.socket.d/listen.conf
-    target: /etc/systemd/system/cockpit.socket.d/listen.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/podman/wg-easy.container
-    target: /etc/containers/systemd/wg-easy.container
-    owner: root:root
-    mode: "0644"
-    format: quadlet
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/wg-easy/env.example
-    target: /data/containers/wg-easy/env
-    owner: "300000:300000"
-    mode: "0600"
-    format: text
-    validate: null
-    secret: true
-    generated: true
-    enabled: true
-    stage: false
-    status: active
-
-  - source: infra/configs/wg-easy/config.json
-    target: null
-    owner: null
-    mode: null
-    format: json
-    validate: jq
-    secret: false
-    generated: false
-    enabled: false
-    stage: false
-    status: reference
-
-  - source: infra/configs/wireguard/modules-load.conf
-    target: /etc/modules-load.d/wireguard.conf
-    owner: root:root
-    mode: "0644"
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/pcp/pmproxy.env
-    target: /etc/sysconfig/pmproxy
-    owner: root:root
-    mode: "0644"
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/pcp/openmetrics/traefik.url
-    target: /etc/pcp/openmetrics/traefik.url
-    owner: root:root
-    mode: "0644"
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-openmetrics.conf
-    target: /etc/tmpfiles.d/pcp-openmetrics.conf
-    owner: root:root
-    mode: "0644"
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/grafana-server.service.d/env.conf
-    target: /etc/systemd/system/grafana-server.service.d/env.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/grafana-server.service.d/data.conf
-    target: /etc/systemd/system/grafana-server.service.d/data.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/valkey.service.d/data.conf
-    target: /etc/systemd/system/valkey.service.d/data.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/grafana/grafana.ini
-    target: /etc/grafana/grafana.ini
-    owner: root:root
-    mode: "0644"
-    format: ini
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/grafana/provisioning/datasources/pcp.yml
-    target: /etc/grafana/provisioning/datasources/pcp.yml
-    owner: root:root
-    mode: "0644"
-    format: yaml
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/grafana/provisioning/dashboards/stack.yml
-    target: /etc/grafana/provisioning/dashboards/stack.yml
-    owner: root:root
-    mode: "0644"
-    format: yaml
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/grafana/dashboards/stack-overview.json
-    target: /etc/grafana/dashboards/stack-overview.json
-    owner: root:root
-    mode: "0644"
-    format: json
-    validate: jq
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/grafana/env.example
-    target: /data/monitoring/grafana/env
-    owner: grafana:grafana
-    mode: "0600"
-    format: text
-    validate: null
-    secret: true
-    generated: true
-    enabled: true
-    stage: false
-    status: active
-
-  - source: infra/configs/valkey/valkey.conf
-    target: /etc/valkey/valkey.conf
-    owner: root:root
-    mode: "0644"
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/prometheus/prometheus.yml
-    target: /etc/prometheus/prometheus.yml
-    owner: prometheus:prometheus
-    mode: "0644"
-    format: yaml
-    validate: promtool check config
-    secret: false
-    generated: false
-    enabled: false
-    stage: false
-    status: reserved
-
-  - source: infra/runtime/alerting/alerting.sh
-    target: /usr/local/libexec/stack-alerting
-    owner: root:root
-    mode: "0755"
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/alerting/env.example
-    target: /data/monitoring/alerting/env
-    owner: alerting:alerting
-    mode: "0600"
-    format: text
-    validate: null
-    secret: true
-    generated: true
-    enabled: true
-    stage: false
-    status: active
-
-  - source: infra/configs/alerting/services.list
-    target: /etc/pcp/alerting/services.list
-    owner: root:root
-    mode: "0644"
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/pcp/pmie/stack-alerts.pmie
-    target: /etc/pcp/pmie/stack-alerts.pmie
-    owner: root:root
-    mode: "0644"
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-alerting.conf
-    target: /etc/tmpfiles.d/pcp-alerting.conf
-    owner: root:root
-    mode: "0644"
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-alert-pmie.service
-    target: /etc/systemd/system/pcp-alert-pmie.service
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: systemd-analyze verify
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-alert-notify@.service
-    target: /etc/systemd/system/pcp-alert-notify@.service
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: systemd-analyze verify
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-service-check.service
-    target: /etc/systemd/system/pcp-service-check.service
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: systemd-analyze verify
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-service-check.timer
-    target: /etc/systemd/system/pcp-service-check.timer
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: systemd-analyze verify
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-cert-check.service
-    target: /etc/systemd/system/pcp-cert-check.service
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: systemd-analyze verify
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-cert-check.timer
-    target: /etc/systemd/system/pcp-cert-check.timer
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: systemd-analyze verify
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-heartbeat.service
-    target: /etc/systemd/system/pcp-heartbeat.service
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: systemd-analyze verify
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pcp-heartbeat.timer
-    target: /etc/systemd/system/pcp-heartbeat.timer
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: systemd-analyze verify
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/traefik.service.d/onfailure.conf
-    target: /etc/systemd/system/traefik.service.d/onfailure.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/wg-easy.service.d/onfailure.conf
-    target: /etc/systemd/system/wg-easy.service.d/onfailure.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pmcd.service.d/onfailure.conf
-    target: /etc/systemd/system/pmcd.service.d/onfailure.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pmlogger.service.d/onfailure.conf
-    target: /etc/systemd/system/pmlogger.service.d/onfailure.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/pmproxy.service.d/onfailure.conf
-    target: /etc/systemd/system/pmproxy.service.d/onfailure.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/grafana-server.service.d/onfailure.conf
-    target: /etc/systemd/system/grafana-server.service.d/onfailure.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/systemd/valkey.service.d/onfailure.conf
-    target: /etc/systemd/system/valkey.service.d/onfailure.conf
-    owner: root:root
-    mode: "0644"
-    format: systemd
-    validate: null
-    secret: false
-    generated: false
-    enabled: true
-    stage: true
-    status: active
-
-  - source: infra/configs/oci-vault/iam-policy.txt
-    target: null
-    owner: null
-    mode: null
-    format: text
-    validate: null
-    secret: false
-    generated: false
-    enabled: false
-    stage: false
-    status: reference
-
-  - source: infra/configs/oci-vault/secrets.yaml
-    target: null
-    owner: null
-    mode: null
-    format: yaml
-    validate: null
-    secret: false
-    generated: false
-    enabled: false
-    stage: false
-    status: reference
+  wireguard:
+    version: "unpinned"
+    files:
+      - source: infra/configs/wireguard/modules-load.conf
+        target: /etc/modules-load.d/wireguard.conf
+        owner: root:root
+        mode: "0644"

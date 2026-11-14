@@ -6,18 +6,28 @@ readonly SCRIPT_DIR
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
 readonly REPO_ROOT
 readonly MANIFEST="${REPO_ROOT}/infra/manifest.yaml"
-readonly TEMPLATE="${REPO_ROOT}/infra/cloud-init/cloud-config.example.yaml"
+readonly SCHEMA="${REPO_ROOT}/infra/manifest.schema.json"
+readonly LOCK="${REPO_ROOT}/infra/manifest.lock.yaml"
+readonly TEMPLATE="${REPO_ROOT}/infra/cloud-init/cloud-config.template.yaml"
 readonly TMP_DIR="${REPO_ROOT}/tmp"
-readonly BEGIN_MARKER='  # BEGIN GENERATED CONFIG FILES'
-readonly END_MARKER='  # END GENERATED CONFIG FILES'
-readonly -a SUPPORTED_FORMATS=(yaml json ini systemd quadlet text)
-readonly -a STAGING_ROOTS=(infra/configs infra/runtime)
+readonly BEGIN_FILES_MARKER='  # BEGIN GENERATED CONFIG FILES'
+readonly END_FILES_MARKER='  # END GENERATED CONFIG FILES'
+readonly BEGIN_RELEASE_MARKER='    # BEGIN GENERATED TRAEFIK RELEASE'
+readonly END_RELEASE_MARKER='    # END GENERATED TRAEFIK RELEASE'
+readonly BEGIN_ARCH_MARKER='    # BEGIN GENERATED TARGET ARCHITECTURE'
+readonly END_ARCH_MARKER='    # END GENERATED TARGET ARCHITECTURE'
+readonly BEGIN_IMAGES_MARKER='    # BEGIN GENERATED LOCKED IMAGES'
+readonly END_IMAGES_MARKER='    # END GENERATED LOCKED IMAGES'
+readonly -a SOURCE_ROOTS=(infra/configs infra/runtime)
 
-declare -a STAGED_ROWS=()
+declare -a FILE_ROWS=()
 CHECK_ONLY=0
 OUTPUT_PATH=""
 HELP_ONLY=0
 TMP_BLOCK=""
+TMP_RELEASE_BLOCK=""
+TMP_ARCH_BLOCK=""
+TMP_IMAGES_BLOCK=""
 TMP_RENDER=""
 
 err() {
@@ -32,6 +42,15 @@ cleanup() {
   if [[ -n "${TMP_BLOCK}" ]]; then
     rm -f -- "${TMP_BLOCK}"
   fi
+  if [[ -n "${TMP_RELEASE_BLOCK}" ]]; then
+    rm -f -- "${TMP_RELEASE_BLOCK}"
+  fi
+  if [[ -n "${TMP_ARCH_BLOCK}" ]]; then
+    rm -f -- "${TMP_ARCH_BLOCK}"
+  fi
+  if [[ -n "${TMP_IMAGES_BLOCK}" ]]; then
+    rm -f -- "${TMP_IMAGES_BLOCK}"
+  fi
   if [[ -n "${TMP_RENDER}" ]]; then
     rm -f -- "${TMP_RENDER}"
   fi
@@ -41,8 +60,9 @@ usage() {
   cat <<'EOF'
 Usage: render-config.sh [--check] [--output PATH]
 
-Render the enabled staged files from infra/manifest.yaml into the cloud-config
-template. The result goes to standard output unless --output is set.
+Render the files from infra/manifest.yaml and the resolved component lock
+from infra/manifest.lock.yaml into the cloud-config template.
+The result goes to standard output unless --output is set.
 
 Options:
   --check          Validate the manifest and sources, then print a summary.
@@ -66,16 +86,74 @@ check_dependencies() {
   fi
 }
 
-staged_entries() {
+file_entries() {
   local query
-  query='.files[] | select(.enabled == true and .stage == true)'
-  query="${query} | [.source, .target, .owner, .mode, .format]"
+  query=".components | to_entries[] | .key as \$component"
+  query="${query} | .value.files[]"
+  query="${query} | [\$component, .source, .target, .owner, .mode]"
   query="${query} | @tsv"
   yq -r "${query}" "${MANIFEST}"
 }
 
+validate_release_lock() {
+  local constraint
+  local architecture
+  local manifest_architecture
+  local source_type
+  local repository
+  local asset
+  local version
+  local sha256
+
+  if [[ ! -f "${LOCK}" ]]; then
+    err "release lock not found: ${LOCK}"
+    return 1
+  fi
+
+  constraint="$(yq -r '.components.traefik.version // ""' "${MANIFEST}")"
+  architecture="$(yq -r '.architecture // ""' "${LOCK}")"
+  manifest_architecture="$(yq -r '.architecture // ""' "${MANIFEST}")"
+  source_type="$(yq -r '.components.traefik.source_type // ""' "${LOCK}")"
+  repository="$(yq -r '.components.traefik.repository // ""' "${LOCK}")"
+  asset="$(yq -r '.components.traefik.asset // ""' "${LOCK}")"
+  version="$(yq -r '.components.traefik.version // ""' "${LOCK}")"
+  sha256="$(yq -r '.components.traefik.sha256 // ""' "${LOCK}")"
+
+  if [[ -z "${constraint}" ]]; then
+    err "manifest has no Traefik version constraint"
+    return 1
+  fi
+  if [[ "${architecture}" != "amd64" && "${architecture}" != "arm64" ]]; then
+    err "release lock has an invalid architecture"
+    return 1
+  fi
+  if [[ "${architecture}" != "${manifest_architecture}" ]]; then
+    err "release lock architecture does not match the manifest"
+    return 1
+  fi
+  if [[ "${source_type}" != "github-release" ]]; then
+    err "release lock has an invalid Traefik source type"
+    return 1
+  fi
+  if [[ ! "${repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    err "release lock has an invalid Traefik repository"
+    return 1
+  fi
+  if [[ ! "${asset}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+    err "release lock has an invalid Traefik asset"
+    return 1
+  fi
+  if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    err "release lock has an invalid Traefik version"
+    return 1
+  fi
+  if [[ ! "${sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+    err "release lock has an invalid Traefik checksum"
+    return 1
+  fi
+}
+
 validate_manifest() {
-  local missing_stage
   local duplicate_targets
 
   if [[ ! -f "${MANIFEST}" ]]; then
@@ -86,61 +164,74 @@ validate_manifest() {
     err "template not found: ${TEMPLATE}"
     return 1
   fi
-
-  missing_stage="$(
-    yq -r '[.files[] | select(has("stage") | not)] | length' "${MANIFEST}"
-  )"
-  if [[ "${missing_stage}" != "0" ]]; then
-    err "manifest entries are missing the stage field"
+  if ! "${SCRIPT_DIR}/validate-manifest.sh" \
+    --manifest "${MANIFEST}" --schema "${SCHEMA}" >&2; then
+    err "manifest schema validation failed"
+    return 1
+  fi
+  if ! validate_release_lock; then
     return 1
   fi
 
-  duplicate_targets=$(staged_entries | cut -f2 | sort | uniq -d)
+  duplicate_targets=$(file_entries | cut -f3 | sort | uniq -d)
   if [[ -n "${duplicate_targets}" ]]; then
-    err "duplicate staged targets: ${duplicate_targets}"
+    err "duplicate targets: ${duplicate_targets}"
     return 1
   fi
 
-  if [[ "$(grep -c -- "${BEGIN_MARKER}" "${TEMPLATE}")" != "1" ]]; then
-    err "template must contain exactly one begin marker: ${BEGIN_MARKER}"
+  if [[ "$(grep -c -- "${BEGIN_FILES_MARKER}" "${TEMPLATE}")" != "1" ]]; then
+    err "template must contain exactly one begin marker: ${BEGIN_FILES_MARKER}"
     return 1
   fi
-  if [[ "$(grep -c -- "${END_MARKER}" "${TEMPLATE}")" != "1" ]]; then
-    err "template must contain exactly one end marker: ${END_MARKER}"
+  if [[ "$(grep -c -- "${END_FILES_MARKER}" "${TEMPLATE}")" != "1" ]]; then
+    err "template must contain exactly one end marker: ${END_FILES_MARKER}"
+    return 1
+  fi
+  if [[ "$(grep -c -- "${BEGIN_RELEASE_MARKER}" "${TEMPLATE}")" != "1" ]]; then
+    err "template must contain exactly one begin marker: ${BEGIN_RELEASE_MARKER}"
+    return 1
+  fi
+  if [[ "$(grep -c -- "${END_RELEASE_MARKER}" "${TEMPLATE}")" != "1" ]]; then
+    err "template must contain exactly one end marker: ${END_RELEASE_MARKER}"
+    return 1
+  fi
+  if [[ "$(grep -c -- "${BEGIN_ARCH_MARKER}" "${TEMPLATE}")" != "1" ]]; then
+    err "template must contain exactly one begin marker: ${BEGIN_ARCH_MARKER}"
+    return 1
+  fi
+  if [[ "$(grep -c -- "${END_ARCH_MARKER}" "${TEMPLATE}")" != "1" ]]; then
+    err "template must contain exactly one end marker: ${END_ARCH_MARKER}"
+    return 1
+  fi
+  if [[ "$(grep -c -- "${BEGIN_IMAGES_MARKER}" "${TEMPLATE}")" != "1" ]]; then
+    err "template must contain exactly one begin marker: ${BEGIN_IMAGES_MARKER}"
+    return 1
+  fi
+  if [[ "$(grep -c -- "${END_IMAGES_MARKER}" "${TEMPLATE}")" != "1" ]]; then
+    err "template must contain exactly one end marker: ${END_IMAGES_MARKER}"
     return 1
   fi
 }
 
-load_staged_entries() {
+load_file_entries() {
   local row
-  STAGED_ROWS=()
+  FILE_ROWS=()
   while IFS= read -r row; do
     if [[ -n "${row}" ]]; then
-      STAGED_ROWS+=("${row}")
+      FILE_ROWS+=("${row}")
     fi
-  done < <(staged_entries)
+  done < <(file_entries)
 
-  if (( ${#STAGED_ROWS[@]} == 0 )); then
-    err "no enabled staged entries in the manifest"
+  if (( ${#FILE_ROWS[@]} == 0 )); then
+    err "no files in the manifest"
     return 1
   fi
 }
 
-is_supported_format() {
-  local format="$1"
-  local candidate
-  for candidate in "${SUPPORTED_FORMATS[@]}"; do
-    if [[ "${format}" == "${candidate}" ]]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-is_staged_source() {
+is_allowed_source() {
   local source_real="$1"
   local root
-  for root in "${STAGING_ROOTS[@]}"; do
+  for root in "${SOURCE_ROOTS[@]}"; do
     if [[ "${source_real}" == "${REPO_ROOT}/${root}/"* ]]; then
       return 0
     fi
@@ -153,32 +244,10 @@ is_executable_mode() {
   (( (8#${mode} & 8#111) != 0 ))
 }
 
-render_entry() {
-  local source="$1"
-  local target="$2"
-  local owner="$3"
-  local mode="$4"
-  local format="$5"
-  local source_abs
-  local source_real
-
-  source_abs="${REPO_ROOT}/${source}"
-  if [[ ! -f "${source_abs}" ]]; then
-    err "source file not found: ${source}"
-    return 1
-  fi
-  if [[ ! -s "${source_abs}" ]]; then
-    err "source file is empty: ${source}"
-    return 1
-  fi
-
-  source_real="$(
-    cd -- "$(dirname -- "${source_abs}")" && pwd -P
-  )/$(basename -- "${source_abs}")"
-  if ! is_staged_source "${source_real}"; then
-    err "source file is outside infra/configs/ and infra/runtime/: ${source}"
-    return 1
-  fi
+validate_target() {
+  local target="$1"
+  local owner="$2"
+  local mode="$3"
 
   if [[ "${target}" != /* ]]; then
     err "target is not an absolute path: ${target}"
@@ -196,13 +265,40 @@ render_entry() {
     err "target has an invalid mode: ${target}"
     return 1
   fi
-  if ! is_supported_format "${format}"; then
-    err "target has an unsupported format: ${target}"
+}
+
+render_entry() {
+  local source="$1"
+  local target="$2"
+  local owner="$3"
+  local mode="$4"
+  local source_abs
+  local source_real
+
+  source_abs="${REPO_ROOT}/${source}"
+  if [[ ! -f "${source_abs}" ]]; then
+    err "source file not found: ${source}"
+    return 1
+  fi
+  if [[ ! -s "${source_abs}" ]]; then
+    err "source file is empty: ${source}"
+    return 1
+  fi
+
+  source_real="$(
+    cd -- "$(dirname -- "${source_abs}")" && pwd -P
+  )/$(basename -- "${source_abs}")"
+  if ! is_allowed_source "${source_real}"; then
+    err "source file is outside infra/configs/ and infra/runtime/: ${source}"
+    return 1
+  fi
+
+  if ! validate_target "${target}" "${owner}" "${mode}"; then
     return 1
   fi
   if is_executable_mode "${mode}" \
     && [[ "${source_real}" != "${REPO_ROOT}/infra/runtime/"* ]]; then
-    err "executable staged source must be under infra/runtime/: ${source}"
+    err "executable source must be under infra/runtime/: ${source}"
     return 1
   fi
 
@@ -222,18 +318,78 @@ render_entry() {
 
 render_all() {
   local row
+  local component
   local source
   local target
   local owner
   local mode
-  local format
 
   : > "${TMP_BLOCK}"
-  for row in "${STAGED_ROWS[@]}"; do
-    IFS=$'\t' read -r source target owner mode format <<< "${row}"
-    render_entry "${source}" "${target}" "${owner}" "${mode}" "${format}" \
+  for row in "${FILE_ROWS[@]}"; do
+    IFS=$'\t' read -r component source target owner mode <<< "${row}"
+    if [[ -z "${component}" || -z "${source}" || -z "${target}" ]]; then
+      err "invalid manifest row: ${row}"
+      return 1
+    fi
+    render_entry "${source}" "${target}" "${owner}" "${mode}" \
       >> "${TMP_BLOCK}"
   done
+}
+
+render_release_block() {
+  local architecture
+  local repository
+  local asset
+  local version
+  local sha256
+
+  architecture="$(yq -r '.architecture' "${LOCK}")"
+  repository="$(yq -r '.components.traefik.repository' "${LOCK}")"
+  asset="$(yq -r '.components.traefik.asset' "${LOCK}")"
+  version="$(yq -r '.components.traefik.version' "${LOCK}")"
+  sha256="$(yq -r '.components.traefik.sha256' "${LOCK}")"
+
+  printf '    TRAEFIK_ARCH="%s"\n' "${architecture}"
+  printf '    TRAEFIK_REPOSITORY="%s"\n' "${repository}"
+  printf '    TRAEFIK_ASSET="%s"\n' "${asset}"
+  printf '    TRAEFIK_VERSION="%s"\n' "${version}"
+  printf '    TRAEFIK_SHA256="%s"\n' "${sha256}"
+}
+
+render_architecture_block() {
+  printf '    TARGET_ARCH="%s"\n' "$(yq -r '.architecture' "${LOCK}")"
+}
+
+render_images_block() {
+  local name
+  local image
+  local version
+  local digest
+  local variable
+
+  while IFS=$'\t' read -r name image; do
+    if [[ -z "${name}" || -z "${image}" ]]; then
+      continue
+    fi
+
+    version="$(yq -r ".components[\"${name}\"].version // \"\"" "${LOCK}")"
+    digest="$(yq -r ".components[\"${name}\"].sha256 // \"\"" "${LOCK}")"
+    if [[ -z "${version}" || ! "${digest}" =~ ^[0-9a-f]{64}$ ]]; then
+      err "lock has no valid OCI image for ${name}"
+      return 1
+    fi
+
+    variable="$(printf '%s' "${name}" | tr '[:lower:]' '[:upper:]' \
+      | tr '-' '_')_IMAGE"
+    printf '    %s="%s:%s@sha256:%s"\n' \
+      "${variable}" "${image}" "${version}" "${digest}"
+  done < <(
+    yq -r '
+      .components | to_entries[]
+      | select(.value.source.type == "oci-image")
+      | [.key, .value.source.image] | @tsv
+    ' "${MANIFEST}"
+  )
 }
 
 render_template() {
@@ -253,7 +409,55 @@ render_template() {
       next
     }
     !in_block { print }
-  ' "${TEMPLATE}"
+  ' "${TEMPLATE}" | awk -v block="${TMP_RELEASE_BLOCK}" '
+    /^    # BEGIN GENERATED TRAEFIK RELEASE$/ {
+      print
+      while ((getline line < block) > 0) {
+        print line
+      }
+      close(block)
+      in_block = 1
+      next
+    }
+    /^    # END GENERATED TRAEFIK RELEASE$/ {
+      in_block = 0
+      print
+      next
+    }
+    !in_block { print }
+  ' | awk -v block="${TMP_ARCH_BLOCK}" '
+    /^    # BEGIN GENERATED TARGET ARCHITECTURE$/ {
+      print
+      while ((getline line < block) > 0) {
+        print line
+      }
+      close(block)
+      in_block = 1
+      next
+    }
+    /^    # END GENERATED TARGET ARCHITECTURE$/ {
+      in_block = 0
+      print
+      next
+    }
+    !in_block { print }
+  ' | awk -v block="${TMP_IMAGES_BLOCK}" '
+    /^    # BEGIN GENERATED LOCKED IMAGES$/ {
+      print
+      while ((getline line < block) > 0) {
+        print line
+      }
+      close(block)
+      in_block = 1
+      next
+    }
+    /^    # END GENERATED LOCKED IMAGES$/ {
+      in_block = 0
+      print
+      next
+    }
+    !in_block { print }
+  '
 }
 
 validate_render() {
@@ -321,18 +525,25 @@ main() {
 
   check_dependencies
   validate_manifest
-  load_staged_entries
+  load_file_entries
 
   mkdir -p -- "${TMP_DIR}"
   TMP_BLOCK="$(mktemp "${TMP_DIR}/render-config-block.XXXXXX")"
+  TMP_RELEASE_BLOCK="$(mktemp "${TMP_DIR}/render-config-release.XXXXXX")"
+  TMP_ARCH_BLOCK="$(mktemp "${TMP_DIR}/render-config-arch.XXXXXX")"
+  TMP_IMAGES_BLOCK="$(mktemp "${TMP_DIR}/render-config-images.XXXXXX")"
   TMP_RENDER="$(mktemp "${TMP_DIR}/render-config-output.XXXXXX")"
 
   render_all
+  render_release_block > "${TMP_RELEASE_BLOCK}"
+  render_architecture_block > "${TMP_ARCH_BLOCK}"
+  render_images_block > "${TMP_IMAGES_BLOCK}"
   render_template > "${TMP_RENDER}"
   validate_render
 
   if (( CHECK_ONLY == 1 )); then
-    printf 'manifest ok: %s staged entries\n' "${#STAGED_ROWS[@]}"
+    printf 'manifest ok: %s components, %s files\n' \
+      "$(yq -r '.components | length' "${MANIFEST}")" "${#FILE_ROWS[@]}"
     return 0
   fi
 
