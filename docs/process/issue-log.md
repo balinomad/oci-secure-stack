@@ -3,7 +3,7 @@ name: "Issue Log"
 description: |
   Stable log of findings with severity, evidence, confidence, and status, plus runtime questions that require deployment tests.
 status: active
-version: 1.5
+version: 1.6
 updated: 2026-11-14
 ---
 
@@ -49,15 +49,15 @@ Legend: Open, Needs verification, Deferred, Fixed.
 
 ## P2: governance and completeness
 
-| ID  | Severity | Finding                                                                                                                                       | Evidence                                                                          | Confidence | Status |
-| --- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------- | ------ |
-| F18 | P2       | Goals and a definition of done exist in the architecture record but are not confirmed. The goal contract is still a draft.                    | `docs/architecture.md`, `tmp/unverified/goals-audit.md`                           | 100%       | Open   |
-| F19 | P2       | No deployment evidence exists for any service or security control.                                                                            | `docs/process/project-status.md`, no test artifacts                               | 100%       | Open   |
-| F20 | P2       | Working tree is inconsistent: tracked deletion of `docs/work-plan.md`, modified `.gitignore`, planning docs untracked.                        | `4a0a2ff`; `git status` clean                                                     | 100%       | Fixed  |
-| F21 | P2       | No IaC for OCI infrastructure, Vault, IAM, or DNS. All prerequisites are manual.                                                              | `docs/guides/operations.md` section 15                                            | 100%       | Open   |
-| F22 | P2       | Backup is documented but not implemented. No Restic, timer, bucket, or backup secret.                                                         | `docs/guides/operations.md` section 11                                            | 100%       | Open   |
-| F23 | P2       | Empty placeholders remain in `infra/host/00-06.sh`. The `infra/configs/` placeholders are populated and rendered by `tools/render-config.sh`. | `tools/render-config.sh --check`; `infra/manifest.yaml`; `infra/host/` file sizes | 100%       | Open   |
-| F24 | P2       | The README, `.env.example`, and `CONTRIBUTING.md` referenced legacy root-level paths.                                                         | `README.md`, `.env.example`, `CONTRIBUTING.md`; paths verified                    | 100%       | Fixed  |
+| ID  | Severity | Finding                                                                                                                                                                 | Evidence                                                                          | Confidence | Status |
+| --- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ---------- | ------ |
+| F18 | P2       | Goals and a definition of done exist in the architecture record but are not confirmed. The goal contract is still a draft.                                              | `docs/architecture.md`, `tmp/unverified/goals-audit.md`                           | 100%       | Open   |
+| F19 | P2       | No deployment evidence exists for any service or security control.                                                                                                      | `docs/process/project-status.md`, no test artifacts                               | 100%       | Open   |
+| F20 | P2       | Working tree is inconsistent: tracked deletion of `docs/work-plan.md`, modified `.gitignore`, planning docs untracked.                                                  | `4a0a2ff`; `git status` clean                                                     | 100%       | Fixed  |
+| F21 | P2       | No IaC for OCI infrastructure, Vault, IAM, or DNS. All prerequisites are manual.                                                                                        | `docs/guides/operations.md` section 15                                            | 100%       | Open   |
+| F22 | P2       | Backup is documented but not implemented. No Restic, timer, bucket, or backup secret.                                                                                   | `docs/guides/operations.md` section 11                                            | 100%       | Open   |
+| F23 | P2       | Empty placeholders remain in `infra/host/00-03.sh` and `infra/host/05-06.sh`. The `infra/configs/` placeholders are populated and rendered by `tools/render-config.sh`. | `tools/render-config.sh --check`; `infra/manifest.yaml`; `infra/host/` file sizes | 100%       | Open   |
+| F24 | P2       | The README, `.env.example`, and `CONTRIBUTING.md` referenced legacy root-level paths.                                                                                   | `README.md`, `.env.example`, `CONTRIBUTING.md`; paths verified                    | 100%       | Fixed  |
 
 ## Runtime questions to answer with evidence
 

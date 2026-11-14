@@ -3,7 +3,7 @@ name: "Process Record"
 description: |
   Index and maintenance rules for the project process record, including the status legend and evidence rules.
 status: active
-version: 1.5
+version: 1.6
 updated: 2026-11-14
 ---
 
@@ -32,6 +32,7 @@ Project-defining material lives outside this directory:
 | Staged runtime assets  | `infra/runtime/`                             |
 | Configuration renderer | `tools/render-config.sh`                     |
 | Host verification      | `infra/host/verify-stack.sh`                 |
+| Authelia deployment    | `infra/host/04-authelia.sh`                  |
 | Monitoring deployment  | `infra/host/07-monitoring.sh`                |
 | Alerting deployment    | `infra/host/08-alerting.sh`                  |
 | Application deployment | `infra/host/deploy-service.sh`               |

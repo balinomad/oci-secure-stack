@@ -3,7 +3,7 @@ name: "Authelia Reference"
 description: |
   Exact Authelia runtime, authentication, storage, session, secret, and access-control configuration, including the conditions for adding Valkey session storage.
 status: draft
-version: 1.1
+version: 1.2
 updated: 2026-11-14
 ---
 
@@ -144,7 +144,33 @@ Valkey adds these operational costs:
 - Backup and restore coverage for session state.
 - A deployment test for container-to-host connectivity.
 
-## 9. Verification
+## 9. Deployment and repair
+
+`infra/host/04-authelia.sh` installs or repairs the rootless service. Run it as root from a repository checkout:
+
+```bash
+sudo ./infra/host/04-authelia.sh
+```
+
+The script performs these actions:
+
+- Creates the `authelia` user and group when absent.
+- Enforces the subordinate UID and GID range `400000:65536`.
+- Enables lingering and waits for the user manager runtime directory.
+- Creates `/data/authelia`, `config`, and `db` with `0700` permissions.
+- Creates or repairs `/data/authelia/env` with the required secrets and `PUID`, `PGID`, and `UMASK`.
+- Installs `/etc/authelia/configuration.yml` and preserves `/data/authelia/config/configuration.yml`.
+- Creates the admin user when `users_database.yaml` is absent.
+- Migrates `db.sqlite3`, `storage.sqlite`, or `storage.sqlite3` to `authelia.sqlite3`.
+- Installs the Quadlet unit, validates the configuration, restarts the service, and checks `/api/health`.
+
+Set `ADMIN_EMAIL` and either `AUTHELIA_ADMIN_PASSWORD` or `AUTHELIA_ADMIN_SECRET_OCID` for a first bootstrap. When `/etc/authelia/configuration.yml` is absent, set `DOMAIN` so the script can render `infra/configs/authelia/configuration.yml`.
+
+Use `--update-config` to replace the runtime configuration with the staged copy. The script keeps a timestamped backup beside the runtime file first.
+
+The script does not modify the `/data` mount configuration or firewall rules.
+
+## 10. Verification
 
 Run these checks as the `authelia` user or with `runuser`:
 
@@ -159,7 +185,7 @@ curl -fsS http://127.0.0.1:9091/api/health
 
 The data directories must be owned by `authelia:authelia`, and `/data/authelia` must use the SELinux label required for container access.
 
-## 10. References
+## 11. References
 
 - `docs/decisions/002-authelia-runtime.md`
 - `docs/decisions/010-monitoring-presentation.md`

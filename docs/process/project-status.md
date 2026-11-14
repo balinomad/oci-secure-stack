@@ -3,7 +3,7 @@ name: "Project Status Report"
 description: |
   Static assessment of repository state, documentation state, implementation status, risks, and explicit non-claims.
 status: active
-version: 1.4
+version: 1.5
 updated: 2026-11-14
 ---
 
@@ -30,17 +30,17 @@ This report covers the project defined in `docs/architecture.md`. It records rep
 
 ## Repository state
 
-| Area                   | State                               | Evidence                                                                            |
-| ---------------------- | ----------------------------------- | ----------------------------------------------------------------------------------- |
-| Cloud-init template    | Template with generated markers     | `infra/cloud-init/cloud-config.example.yaml`                                        |
-| Verification script    | Non-empty, shellcheck clean         | `infra/host/verify-stack.sh`; `shellcheck infra/host/verify-stack.sh`               |
-| Deployment script      | Non-empty, shellcheck clean         | `infra/host/deploy-service.sh`; `shellcheck infra/host/deploy-service.sh`           |
-| Modular deploy scripts | Partial                             | `infra/host/00-06` empty; `infra/host/07-monitoring.sh` and `08-alerting.sh` active |
-| Extracted configs      | Populated, manifest and renderer    | `infra/manifest.yaml`; `tools/render-config.sh --check`                             |
-| Documentation          | Consolidated, no empty placeholders | `README.md`, `docs/`                                                                |
-| Planning and research  | Substantive, kept as evidence       | `tmp/unverified/`, `tmp/legacy/work-plan.md`                                        |
-| CI                     | None                                | `.github/workflows` empty                                                           |
-| Changelog or releases  | None                                | No `CHANGELOG.md`, no tags                                                          |
+| Area                   | State                               | Evidence                                                                                                |
+| ---------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Cloud-init template    | Template with generated markers     | `infra/cloud-init/cloud-config.example.yaml`                                                            |
+| Verification script    | Non-empty, shellcheck clean         | `infra/host/verify-stack.sh`; `shellcheck infra/host/verify-stack.sh`                                   |
+| Deployment script      | Non-empty, shellcheck clean         | `infra/host/deploy-service.sh`; `shellcheck infra/host/deploy-service.sh`                               |
+| Modular deploy scripts | Partial                             | `infra/host/00-03` and `05-06` empty; `04-authelia.sh`, `07-monitoring.sh`, and `08-alerting.sh` active |
+| Extracted configs      | Populated, manifest and renderer    | `infra/manifest.yaml`; `tools/render-config.sh --check`                                                 |
+| Documentation          | Consolidated, no empty placeholders | `README.md`, `docs/`                                                                                    |
+| Planning and research  | Substantive, kept as evidence       | `tmp/unverified/`, `tmp/legacy/work-plan.md`                                                            |
+| CI                     | None                                | `.github/workflows` empty                                                                               |
+| Changelog or releases  | None                                | No `CHANGELOG.md`, no tags                                                                              |
 
 ## Git state
 
@@ -78,7 +78,7 @@ Implemented in the monolith:
 - SELinux contexts, firewalld rules, IP forwarding, persistent journal
 - Architecture-aware Traefik download
 - Manifest replay for application services after VM replacement
-- Verification and application deployment scripts
+- Verification, application deployment, and Authelia repair scripts
 - PCP export through `pmproxy`, the Podman PMDA, and the OpenMetrics PMDA
 - Optional Grafana and Valkey monitoring profiles, statically configured
 - Alert delivery through PCP `pmie`, systemd failure hooks, an HTTPS webhook, and an external heartbeat, statically configured

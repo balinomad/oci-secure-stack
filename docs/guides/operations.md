@@ -3,7 +3,7 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.4
+version: 1.5
 updated: 2026-11-14
 ---
 
@@ -106,7 +106,7 @@ sudo cloud-init modules --mode=config
 | 4    | Symlinks                          | `readlink -f /etc/traefik/letsencrypt` returns `/data/traefik/letsencrypt`                                                                                                                   |
 | 5    | Traefik directories and ownership | `ls -la /etc/traefik/` shows `traefik:traefik` ownership                                                                                                                                     |
 | 6    | Container tools                   | `podman --version`; `podman images` shows wg-easy; the `authelia` user store shows Authelia                                                                                                  |
-| 7    | Vault secrets                     | `/etc/traefik/env` contains `CF_DNS_API_TOKEN`; `/run/authelia-bootstrap.tmp` exists; `/run/grafana-bootstrap.tmp` exists for UI profiles                                     |
+| 7    | Vault secrets                     | `/etc/traefik/env` contains `CF_DNS_API_TOKEN`; `/run/authelia-bootstrap.tmp` exists; `/run/grafana-bootstrap.tmp` exists for UI profiles                                                    |
 | 8    | Authelia bootstrap                | `/data/authelia/env`, `configuration.yml`, and `users_database.yaml` exist; `/data/authelia` is owned by `authelia`                                                                          |
 | 9    | wg-easy environment               | `/data/containers/wg-easy/env` exists and is owned by host UID `300000`; `/run/wg-bootstrap.tmp` does not exist                                                                              |
 | 10   | SELinux contexts                  | `ausearch -m avc -ts recent \| grep -E 'traefik\|authelia'` returns nothing                                                                                                                  |
@@ -117,7 +117,7 @@ sudo cloud-init modules --mode=config
 | 14   | Journal persistence               | `/var/log/journal/` exists                                                                                                                                                                   |
 | 15   | Firewall rules                    | `firewall-cmd --list-all` shows HTTP, HTTPS, and 51820/UDP                                                                                                                                   |
 | 16   | Service start                     | `systemctl is-active traefik wg-easy cockpit.socket pmcd pmlogger pmproxy`; the `authelia` user unit is active                                                                               |
-| 17   | Monitoring                        | `curl -fsS http://127.0.0.1:44322/metrics` succeeds; Grafana and Valkey are active only for their profiles                                                                                    |
+| 17   | Monitoring                        | `curl -fsS http://127.0.0.1:44322/metrics` succeeds; Grafana and Valkey are active only for their profiles                                                                                   |
 
 Once all blocks pass, run `sudo ./infra/host/verify-stack.sh`.
 
@@ -185,6 +185,28 @@ sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
 ```
 
 Expected health response: `{"status":"OK"}`.
+
+#### 4.2.1 Install or update Authelia
+
+Run the deployment script as root from a repository checkout:
+
+```bash
+sudo ./infra/host/04-authelia.sh
+```
+
+The script is idempotent. It creates or repairs the `authelia` user, subordinate ID range, lingering, directories, environment file, configuration, user database, and Quadlet unit. It validates the configuration, restarts the user unit, and waits for the loopback health endpoint.
+
+The runtime configuration at `/data/authelia/config/configuration.yml` is preserved. To replace it with `/etc/authelia/configuration.yml`, run:
+
+```bash
+sudo ./infra/host/04-authelia.sh --update-config
+```
+
+The script keeps a timestamped backup beside the runtime file before replacement.
+
+For first bootstrap, set `ADMIN_EMAIL` and either `AUTHELIA_ADMIN_PASSWORD` or `AUTHELIA_ADMIN_SECRET_OCID`. When `/etc/authelia/configuration.yml` is absent, also set `DOMAIN` so the script can render the tracked template.
+
+The script stops when `/data` is not mounted, the subordinate ID range differs from `400000:65536`, or the user database is absent and no admin password source is provided.
 
 ### 4.3 wg-easy and WireGuard
 

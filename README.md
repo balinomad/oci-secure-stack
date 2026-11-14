@@ -90,6 +90,7 @@ The full security model, threat model, and non-goals are in [docs/architecture.m
 | `infra/host/`                                | Host deployment and verification scripts                  |
 | `tools/render-config.sh`                     | Render deployment sources into the cloud-config template  |
 | `.env.example`                               | Variable template; copy to `.env` and fill in values      |
+| `infra/host/04-authelia.sh`                  | Install or repair the rootless Authelia service           |
 | `infra/host/07-monitoring.sh`                | Install or change the local monitoring profile            |
 | `infra/host/08-alerting.sh`                  | Install or update alert delivery                          |
 | `infra/host/deploy-service.sh`               | Deploy a new Podman container service                     |
