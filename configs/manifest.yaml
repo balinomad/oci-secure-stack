@@ -343,6 +343,246 @@ files:
     stage: false
     status: reserved
 
+  - source: configs/alerting/alerting.sh
+    target: /usr/local/libexec/stack-alerting
+    owner: root:root
+    mode: "0755"
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/alerting/env.example
+    target: /data/monitoring/alerting/env
+    owner: alerting:alerting
+    mode: "0600"
+    format: text
+    validate: null
+    secret: true
+    generated: true
+    enabled: true
+    stage: false
+    status: active
+
+  - source: configs/alerting/services.list
+    target: /etc/pcp/alerting/services.list
+    owner: root:root
+    mode: "0644"
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/pcp/pmie/stack-alerts.pmie
+    target: /etc/pcp/pmie/stack-alerts.pmie
+    owner: root:root
+    mode: "0644"
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-alerting.conf
+    target: /etc/tmpfiles.d/pcp-alerting.conf
+    owner: root:root
+    mode: "0644"
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-alert-pmie.service
+    target: /etc/systemd/system/pcp-alert-pmie.service
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: systemd-analyze verify
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-alert-notify@.service
+    target: /etc/systemd/system/pcp-alert-notify@.service
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: systemd-analyze verify
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-service-check.service
+    target: /etc/systemd/system/pcp-service-check.service
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: systemd-analyze verify
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-service-check.timer
+    target: /etc/systemd/system/pcp-service-check.timer
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: systemd-analyze verify
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-cert-check.service
+    target: /etc/systemd/system/pcp-cert-check.service
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: systemd-analyze verify
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-cert-check.timer
+    target: /etc/systemd/system/pcp-cert-check.timer
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: systemd-analyze verify
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-heartbeat.service
+    target: /etc/systemd/system/pcp-heartbeat.service
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: systemd-analyze verify
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-heartbeat.timer
+    target: /etc/systemd/system/pcp-heartbeat.timer
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: systemd-analyze verify
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/traefik.service.d/onfailure.conf
+    target: /etc/systemd/system/traefik.service.d/onfailure.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/wg-easy.service.d/onfailure.conf
+    target: /etc/systemd/system/wg-easy.service.d/onfailure.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pmcd.service.d/onfailure.conf
+    target: /etc/systemd/system/pmcd.service.d/onfailure.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pmlogger.service.d/onfailure.conf
+    target: /etc/systemd/system/pmlogger.service.d/onfailure.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pmproxy.service.d/onfailure.conf
+    target: /etc/systemd/system/pmproxy.service.d/onfailure.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/grafana-server.service.d/onfailure.conf
+    target: /etc/systemd/system/grafana-server.service.d/onfailure.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/valkey.service.d/onfailure.conf
+    target: /etc/systemd/system/valkey.service.d/onfailure.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
   - source: configs/oci-vault/iam-policy.txt
     target: null
     owner: null

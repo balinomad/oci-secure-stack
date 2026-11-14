@@ -8,11 +8,12 @@ Configurations are grouped by component. Each component keeps its native format.
 
 | Directory             | Contents                                                                                 | Status    |
 | --------------------- | ---------------------------------------------------------------------------------------- | --------- |
+| `configs/alerting/`   | Alerting runtime script, service check list, and environment template                    | Active    |
 | `configs/authelia/`   | Authelia configuration and environment template                                          | Active    |
 | `configs/cockpit/`    | Cockpit web service configuration                                                        | Active    |
 | `configs/grafana/`    | Grafana configuration, provisioning, dashboard, and environment template                 | Active    |
 | `configs/oci-vault/`  | OCI Vault policy draft and secret inventory                                              | Reference |
-| `configs/pcp/`        | PCP pmproxy and OpenMetrics configuration                                                 | Active    |
+| `configs/pcp/`        | PCP pmproxy, OpenMetrics, and pmie alerting configuration                                | Active    |
 | `configs/podman/`     | Podman Quadlet units for Authelia and wg-easy                                            | Active    |
 | `configs/prometheus/` | Reserved Prometheus configuration                                                        | Disabled  |
 | `configs/systemd/`    | Host systemd units and drop-ins                                                          | Active    |
@@ -52,6 +53,7 @@ Do not store secret values, secret OCIDs, private keys, tokens, password hashes,
 | `/data/authelia/env`                        | `authelia-admin-password`  |
 | `/data/containers/wg-easy/env`              | `wg-easy-admin-password`   |
 | `/data/monitoring/grafana/env`              | `grafana-admin-password`   |
+| `/data/monitoring/alerting/env`             | `alert-webhook-url`, `alert-heartbeat-url` |
 | `/etc/traefik/letsencrypt/acme.json`        | ACME certificate state     |
 | `/data/authelia/config/users_database.yaml` | Bootstrap password hash    |
 

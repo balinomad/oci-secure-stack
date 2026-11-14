@@ -1,0 +1,10 @@
+delta = 2 min;
+
+some_inst ( filesys.full > 85 )
+    -> shell 30 min "/usr/local/libexec/stack-alerting notify-code filesystem-usage";
+
+kernel.all.load #'1 minute' > 4
+    -> shell 30 min "/usr/local/libexec/stack-alerting notify-code load-high";
+
+mem.util.available < 512 Mbyte
+    -> shell 30 min "/usr/local/libexec/stack-alerting notify-code memory-low";

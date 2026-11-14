@@ -1,0 +1,30 @@
+[Unit]
+Description=Check core systemd units and loopback health endpoints
+After=network-online.target
+Wants=network-online.target
+OnFailure=pcp-alert-notify@%n.service
+
+[Service]
+Type=oneshot
+User=alerting
+Group=alerting
+ExecStart=/usr/local/libexec/stack-alerting check-services
+TimeoutStartSec=60
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ReadOnlyPaths=/data
+ReadWritePaths=/var/lib/stack-alerting
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallFilter=@system-service
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+UMask=0077

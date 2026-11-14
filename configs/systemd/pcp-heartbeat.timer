@@ -1,0 +1,11 @@
+[Unit]
+Description=Send the external alert heartbeat every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=pcp-heartbeat.service
+
+[Install]
+WantedBy=timers.target

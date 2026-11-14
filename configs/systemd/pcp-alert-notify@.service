@@ -1,0 +1,29 @@
+[Unit]
+Description=Send a stack alert for unit %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=alerting
+Group=alerting
+ExecStart=/usr/local/libexec/stack-alerting notify failure "Unit %i failed"
+TimeoutStartSec=30
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ReadOnlyPaths=/data
+ReadWritePaths=/var/lib/stack-alerting
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallFilter=@system-service
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+UMask=0077

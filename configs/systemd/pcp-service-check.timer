@@ -1,0 +1,11 @@
+[Unit]
+Description=Check core service health every two minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=2min
+AccuracySec=30s
+Unit=pcp-service-check.service
+
+[Install]
+WantedBy=timers.target

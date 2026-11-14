@@ -1,0 +1,34 @@
+[Unit]
+Description=PCP pmie alert rules
+After=pmcd.service network-online.target
+Wants=network-online.target
+Requires=pmcd.service
+OnFailure=pcp-alert-notify@%n.service
+
+[Service]
+Type=simple
+User=alerting
+Group=alerting
+ExecStart=/usr/bin/pmie -c /etc/pcp/pmie/stack-alerts.pmie -f
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ReadOnlyPaths=/data
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallFilter=@system-service
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

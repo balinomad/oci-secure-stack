@@ -1,0 +1,14 @@
+# Service checks for pcp-service-check.service.
+# system:          required systemd unit.
+# system-optional: checked only when the unit is installed.
+# http:            required loopback health endpoint.
+system:traefik.service
+system:wg-easy.service
+system:cockpit.socket
+system:auditd.service
+system:pmcd.service
+system:pmlogger.service
+system:pmproxy.service
+system:pcp-alert-pmie.service
+http:traefik:http://127.0.0.1:8080/ping
+http:authelia:http://127.0.0.1:9091/api/health
