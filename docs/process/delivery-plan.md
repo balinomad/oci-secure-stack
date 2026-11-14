@@ -3,8 +3,8 @@ name: "OCI Secure Stack Delivery Plan"
 description: |
   Decision-first plan for resuming work, with phases, tasks, gates, estimates, and immediate next actions.
 status: active
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # OCI Secure Stack Delivery Plan
@@ -57,7 +57,7 @@ Gate GA: every goal has a named maintainer, a testable criterion, and no unresol
 
 ## Phase B: Repository recovery (0.5 day)
 
-- [x] B1 Move research and planning out of the ignored `docs/tmp/` into tracked paths. (moved 2026-11-12; commit `4a0a2ff`)
+- [ ] B1 Move research and planning out of the ignored `docs/tmp/` into tracked paths. Commit `4a0a2ff` moved them once, but the current copies under `tmp/` are ignored again.
 - [x] B2 Resolve the uncommitted deletion and `.gitignore` change in one commit. (commit `4a0a2ff`)
 - [ ] B3 Tag `v0.1.0-pre-resume`.
 - [ ] B4 Create branch `work/decision-baseline`.
@@ -77,7 +77,7 @@ Only findings that follow from confirmed decisions are fixed here.
 - [ ] C6 F6: implement ADR-001 for dashboard and metrics.
 - [ ] C7 F7: attach security headers to the intended routers.
 - [ ] C8 F8: implement ADR-003 and remove the self-proxy metrics route.
-- [ ] C9 F9: bind Cockpit to localhost and remove the direct firewall rule.
+- [x] C9 F9: bind Cockpit to localhost and remove the direct firewall rule.
 - [ ] C10 F11 and F13: fix manifest permissions and volume validation.
 - [ ] C11 F15: verify version pins against upstream.
 - [x] C12 F24: update stale README, `.env.example`, and `CONTRIBUTING.md` paths.
@@ -101,10 +101,10 @@ Gate GD: `scripts/host/verify-stack.sh` exits 0 and every item in `docs/process/
 
 ## Phase E: Structural refactor (3-5 days)
 
-- [ ] E1 Extract configuration into `configs/`.
+- [x] E1 Extract configuration into `configs/`. Evidence: `configs/manifest.yaml`, `scripts/repo/render-config.sh`.
 - [ ] E2 Populate `scripts/host/deploy/00-06` as idempotent modules.
 - [ ] E3 Implement Makefile targets: `lint`, `render`, `deploy`, `verify`, `backup`.
-- [ ] E4 Convert infrastructure containers to Quadlet if ADR-001 or ADR-005 requires it.
+- [x] E4 Convert infrastructure containers to Quadlet per ADR-009.
 - [ ] E5 Clean-room deploy from the refactored tree.
 - [ ] E6 Compare behaviour with the Phase D baseline.
 
@@ -112,7 +112,7 @@ Gate GE: parity with the Phase D baseline. No regression.
 
 ## Phase F: Documentation (3-4 days)
 
-- [x] F1 Consolidate the documentation tree into one front door, one design record, three guides, one reference, and one process record.
+- [x] F1 Consolidate the documentation tree into one front door, one design record, three guides, one reference set, and one process record.
 - [x] F2 Write prerequisites and getting started from the documented OCI steps.
 - [x] F3 Write verification, maintenance, recovery, and troubleshooting into the operations runbook.
 - [x] F4 Remove unproven README claims and add a documentation map.

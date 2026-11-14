@@ -3,8 +3,8 @@ name: "Process Record"
 description: |
   Index and maintenance rules for the project process record, including the status legend and evidence rules.
 status: active
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # Process Record
@@ -15,12 +15,23 @@ Project-defining material lives outside this directory:
 
 - Purpose, goals, principles, architecture, and security model: `docs/architecture.md`
 - Strategic decisions: `docs/decisions/`
-- Deployment tutorial: `docs/guides/getting-started.md`
+- Deployment procedure: `docs/guides/getting-started.md`
 - Operations runbook: `docs/guides/operations.md`
 - Application integration: `docs/guides/adding-apps.md`
 - Infrastructure reference: `docs/reference/infrastructure.md`
 - Traefik reference: `docs/reference/traefik.md`
 - Application manifest reference: `docs/reference/application-manifest.md`
+
+## Implementation sources
+
+| Role                   | Path                                         |
+| ---------------------- | -------------------------------------------- |
+| Stack implementation   | `infra/cloud-init/cloud-config.example.yaml` |
+| Configuration source   | `configs/manifest.yaml`                      |
+| Configuration renderer | `scripts/repo/render-config.sh`              |
+| Host verification      | `scripts/host/verify-stack.sh`               |
+| Application deployment | `scripts/host/deploy-service.sh`             |
+| Documentation audit    | `scripts/repo/audit-docs.sh`                 |
 
 Baseline: commit `2c1ae2c`, 2026-11-12.\
 Method: static analysis of repository files. No OCI deployment has been executed.
@@ -34,9 +45,6 @@ Method: static analysis of repository files. No OCI deployment has been executed
 | [docs/process/issue-log.md](/docs/process/issue-log.md)                       | Stable, numbered issues with evidence and status                         | An issue is found, fixed, or reclassified |
 | [docs/process/delivery-plan.md](/docs/process/delivery-plan.md)               | Decision-first delivery plan, phases, gates, estimates, and next actions | A phase starts or closes                  |
 | [docs/process/acceptance-criteria.md](/docs/process/acceptance-criteria.md)   | Acceptance criteria with recorded evidence                               | A criterion is proven or changed          |
-| [tmp/unverified/](/tmp/unverified/)                                           | Point-in-time audits and migration evidence                              | A new audit is produced                   |
-| [tmp/legacy/](/tmp/legacy/)                                                   | Legacy source documents retained until migration verification            | A legacy section is verified and removed  |
-| [tmp/legacy/work-plan.md](/tmp/legacy/work-plan.md)                           | Legacy implementation work plan, unverified                              | During legacy content extraction          |
 
 ## Status legend
 
