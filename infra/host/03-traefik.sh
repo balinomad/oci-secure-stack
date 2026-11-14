@@ -10,7 +10,6 @@ readonly TRAEFIK_USER="traefik"
 readonly TRAEFIK_CONFIG="/etc/traefik/traefik.yaml"
 readonly TRAEFIK_DYNAMIC_DIR="/etc/traefik/config"
 readonly TRAEFIK_ENV="/etc/traefik/env"
-readonly TRAEFIK_RELEASE="/etc/traefik/release.env"
 readonly TRAEFIK_BINARY="/usr/local/bin/traefik"
 readonly TRAEFIK_UNIT="/etc/systemd/system/traefik.service"
 readonly TRAEFIK_LOGROTATE="/etc/logrotate.d/traefik"
@@ -22,6 +21,11 @@ readonly CF_PLACEHOLDER="CF_DNS_API_TOKEN=<<INJECT_AT_DEPLOYMENT>>"
 
 TMP_CONFIG=""
 TMP_DIR=""
+TRAEFIK_ARCH=""
+TRAEFIK_VERSION=""
+TRAEFIK_SHA256=""
+TRAEFIK_REPOSITORY=""
+TRAEFIK_ASSET=""
 
 usage() {
   cat <<'USAGE'
@@ -29,9 +33,9 @@ Usage: 03-traefik.sh
 
 Install or repair the Traefik edge router from a repository checkout.
 The script is idempotent. It creates the service user, directories, symlinks,
-environment file, release metadata from infra/manifest.lock.yaml, systemd unit,
-and missing configuration, then verifies the release checksum and starts the
-service.
+environment file, reads locked release values from infra/manifest.lock.yaml, installs
+the systemd unit and missing configuration, then verifies the release checksum
+and starts the service.
 
 Existing Traefik configuration files under /etc/traefik are preserved.
 Delete a file or render it from infra/configs/traefik to replace it.
@@ -211,12 +215,15 @@ install_files() {
     "${REPO_ROOT}/infra/configs/systemd/traefik.service" "${TRAEFIK_UNIT}"
 }
 
-sync_release() {
+read_release() {
   local lock="${REPO_ROOT}/infra/manifest.lock.yaml"
   local parsed
+  local architecture
+  local source_type
+  local repository
+  local asset
   local version
-  local sha_amd64
-  local sha_arm64
+  local sha256
 
   if [[ ! -f "${lock}" ]]; then
     err "release lock not found: ${lock}"
@@ -225,12 +232,16 @@ sync_release() {
 
   parsed="$(
     awk '
-      $0 == "  traefik:" { in_traefik = 1; next }
+      $1 == "architecture:" { architecture = $2 }
+      $0 == "components:" { in_components = 1; next }
+      in_components && $0 == "  traefik:" { in_traefik = 1; next }
       in_traefik && $0 ~ /^  [^ ]/ { exit }
+      in_traefik && $1 == "source_type:" { source_type = $2 }
+      in_traefik && $1 == "repository:" { repository = $2 }
+      in_traefik && $1 == "asset:" { asset = $2 }
       in_traefik && $1 == "version:" { version = $2 }
-      in_traefik && $1 == "amd64:" { amd64 = $2 }
-      in_traefik && $1 == "arm64:" { arm64 = $2 }
-      END { print version, amd64, arm64 }
+      in_traefik && $1 == "sha256:" { sha256 = $2 }
+      END { print architecture, source_type, repository, asset, version, sha256 }
     ' "${lock}"
   )"
 
@@ -239,52 +250,43 @@ sync_release() {
     exit 1
   fi
 
-  read -r version sha_amd64 sha_arm64 <<< "${parsed}"
+  read -r architecture source_type repository asset version sha256 <<< "${parsed}"
 
+  if [[ "${architecture}" != "amd64" && "${architecture}" != "arm64" ]]; then
+    err "invalid architecture in ${lock}"
+    exit 1
+  fi
+  if [[ "${source_type}" != "github-release" ]]; then
+    err "invalid Traefik source type in ${lock}"
+    exit 1
+  fi
+  if [[ ! "${repository}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    err "invalid Traefik repository in ${lock}"
+    exit 1
+  fi
+  if [[ -z "${asset}" || "${asset}" == */* || "${asset}" =~ [[:space:]] ]]; then
+    err "invalid Traefik asset in ${lock}"
+    exit 1
+  fi
   if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     err "invalid Traefik version in ${lock}"
     exit 1
   fi
-  if [[ ! "${sha_amd64}" =~ ^[0-9a-f]{64}$ ]]; then
-    err "invalid Traefik amd64 checksum in ${lock}"
-    exit 1
-  fi
-  if [[ ! "${sha_arm64}" =~ ^[0-9a-f]{64}$ ]]; then
-    err "invalid Traefik arm64 checksum in ${lock}"
+  if [[ ! "${sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+    err "invalid Traefik checksum in ${lock}"
     exit 1
   fi
 
-  umask 022
-  {
-    printf '# Generated from infra/manifest.lock.yaml. Do not edit.\n'
-    printf 'TRAEFIK_VERSION=%s\n' "${version}"
-    printf 'TRAEFIK_SHA256_AMD64=%s\n' "${sha_amd64}"
-    printf 'TRAEFIK_SHA256_ARM64=%s\n' "${sha_arm64}"
-  } > "${TRAEFIK_RELEASE}"
-  chown "${TRAEFIK_USER}:${TRAEFIK_USER}" "${TRAEFIK_RELEASE}"
-  chmod 0644 "${TRAEFIK_RELEASE}"
-}
-
-load_release() {
-  if [[ ! -f "${TRAEFIK_RELEASE}" ]]; then
-    err "release metadata is missing: ${TRAEFIK_RELEASE}"
-    exit 1
-  fi
-
-  # shellcheck source=/dev/null
-  . "${TRAEFIK_RELEASE}"
-
-  if [[ -z "${TRAEFIK_VERSION:-}" || -z "${TRAEFIK_SHA256_AMD64:-}" \
-    || -z "${TRAEFIK_SHA256_ARM64:-}" ]]; then
-    err "${TRAEFIK_RELEASE} is incomplete"
-    exit 1
-  fi
+  TRAEFIK_ARCH="${architecture}"
+  TRAEFIK_VERSION="${version}"
+  TRAEFIK_SHA256="${sha256}"
+  TRAEFIK_REPOSITORY="${repository}"
+  TRAEFIK_ASSET="${asset}"
 }
 
 install_binary() {
   local version="${TRAEFIK_VERSION#v}"
-  local arch
-  local sha256
+  local host_arch
   local archive
 
   if [[ -x "${TRAEFIK_BINARY}" ]] \
@@ -296,25 +298,27 @@ install_binary() {
 
   case "$(uname -m)" in
     x86_64)
-      arch="amd64"
-      sha256="${TRAEFIK_SHA256_AMD64}"
+      host_arch="amd64"
       ;;
     aarch64)
-      arch="arm64"
-      sha256="${TRAEFIK_SHA256_ARM64}"
+      host_arch="arm64"
       ;;
     *)
       err "unsupported architecture: $(uname -m)"
       exit 1
       ;;
   esac
+  if [[ "${host_arch}" != "${TRAEFIK_ARCH}" ]]; then
+    err "lock architecture ${TRAEFIK_ARCH} does not match host architecture ${host_arch}"
+    exit 1
+  fi
 
   TMP_DIR="$(mktemp -d)"
   archive="${TMP_DIR}/traefik.tar.gz"
   curl -fsSL --connect-timeout 10 --max-time 300 \
-    "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${arch}.tar.gz" \
+    "https://github.com/${TRAEFIK_REPOSITORY}/releases/download/${TRAEFIK_VERSION}/${TRAEFIK_ASSET}" \
     -o "${archive}"
-  printf '%s  %s\n' "${sha256}" "${archive}" | sha256sum -c -
+  printf '%s  %s\n' "${TRAEFIK_SHA256}" "${archive}" | sha256sum -c -
   tar -xzf "${archive}" -C "${TMP_DIR}" traefik
   install -m 0755 -o root -g root "${TMP_DIR}/traefik" "${TRAEFIK_BINARY}"
   printf 'Installed Traefik %s.\n' "${version}"
@@ -448,8 +452,7 @@ main() {
   ensure_config
   fix_ownership
   install_files
-  sync_release
-  load_release
+  read_release
   install_binary
   ensure_symlinks
   configure_selinux

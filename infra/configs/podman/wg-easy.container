@@ -3,6 +3,7 @@ Description=WireGuard Easy Management UI
 
 [Container]
 ContainerName=wg-easy
+# The deployment overrides this image with the locked digest.
 Image=ghcr.io/wg-easy/wg-easy:15
 PublishPort=51820:51820/udp
 PublishPort=127.0.0.1:51821:51821/tcp

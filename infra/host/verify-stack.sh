@@ -27,6 +27,11 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly SCRIPT_DIR
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
+readonly REPO_ROOT
+
 # --------------------------------------------------------------
 # Formatting
 # --------------------------------------------------------------
@@ -58,6 +63,37 @@ echo "======================================================"
 echo " OCI Secure Admin Stack — Verification"
 echo "======================================================"
 echo -e "${RESET}"
+
+# --------------------------------------------------------------
+# 0. Target Architecture
+# --------------------------------------------------------------
+header "0. Target Architecture"
+
+LOCK_FILE="${REPO_ROOT}/infra/manifest.lock.yaml"
+if [[ ! -f "${LOCK_FILE}" ]]; then
+  fail "component lock is missing at ${LOCK_FILE}"
+  exit 1
+fi
+
+LOCK_ARCH="$(awk '$1 == "architecture:" { print $2; exit }' "${LOCK_FILE}")"
+case "$(uname -m)" in
+  x86_64)
+    HOST_ARCH="amd64"
+    ;;
+  aarch64)
+    HOST_ARCH="arm64"
+    ;;
+  *)
+    fail "unsupported architecture: $(uname -m)"
+    exit 1
+    ;;
+esac
+
+if [[ "${HOST_ARCH}" != "${LOCK_ARCH}" ]]; then
+  fail "lock architecture ${LOCK_ARCH} does not match host architecture ${HOST_ARCH}"
+  exit 1
+fi
+pass "lock architecture ${LOCK_ARCH} matches host architecture ${HOST_ARCH}"
 
 # --------------------------------------------------------------
 # 1. Boot Volume Expansion
@@ -210,6 +246,14 @@ if [[ -n "$AUTHELIA_UID" ]]; then
   else
     fail "authelia Quadlet unit is missing"
   fi
+
+  if grep -q '^Image=.*@sha256:' \
+    "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container.d/10-image.conf" \
+    2>/dev/null; then
+    pass "authelia image is pinned by digest"
+  else
+    fail "authelia image is not pinned by digest"
+  fi
 else
   fail "authelia user does not exist"
 fi
@@ -218,6 +262,13 @@ if [[ -f /etc/containers/systemd/wg-easy.container ]]; then
   pass "wg-easy Quadlet unit is installed"
 else
   fail "wg-easy Quadlet unit is missing"
+fi
+
+if grep -q '^Image=.*@sha256:' \
+  /etc/containers/systemd/wg-easy.container.d/10-image.conf 2>/dev/null; then
+  pass "wg-easy image is pinned by digest"
+else
+  fail "wg-easy image is not pinned by digest"
 fi
 
 if [[ "$(stat -c %U /data/authelia 2>/dev/null || true)" == "authelia" ]]; then

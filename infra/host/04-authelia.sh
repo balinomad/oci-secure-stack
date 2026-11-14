@@ -7,7 +7,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
 readonly REPO_ROOT
 
 readonly AUTHELIA_USER="authelia"
-readonly AUTHELIA_IMAGE="authelia/authelia:4.39"
+AUTHELIA_IMAGE=""
 readonly AUTHELIA_SUBID_RANGE="400000-465535"
 readonly ENV_FILE="/data/authelia/env"
 readonly CONFIG_DIR="/data/authelia/config"
@@ -229,6 +229,53 @@ install_config() {
   fi
 }
 
+read_lock_image() {
+  local lock="${REPO_ROOT}/infra/manifest.lock.yaml"
+  local parsed
+  local source_type
+  local image
+  local version
+  local sha256
+
+  if [[ ! -f "${lock}" ]]; then
+    err "component lock not found: ${lock}"
+    exit 1
+  fi
+
+  parsed="$(
+    awk '
+      $0 == "components:" { in_components = 1; next }
+      in_components && $0 == "  authelia:" { in_authelia = 1; next }
+      in_authelia && $0 ~ /^  [^ ]/ { exit }
+      in_authelia && $1 == "source_type:" { source_type = $2 }
+      in_authelia && $1 == "image:" { image = $2 }
+      in_authelia && $1 == "version:" { version = $2 }
+      in_authelia && $1 == "sha256:" { sha256 = $2 }
+      END { print source_type, image, version, sha256 }
+    ' "${lock}"
+  )"
+  read -r source_type image version sha256 <<< "${parsed}"
+
+  if [[ "${source_type}" != "oci-image" ]]; then
+    err "invalid Authelia source type in ${lock}"
+    exit 1
+  fi
+  if [[ -z "${image}" || "${image}" == *"@"* || "${image}" =~ [[:space:]] ]]; then
+    err "invalid Authelia image in ${lock}"
+    exit 1
+  fi
+  if [[ ! "${version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    err "invalid Authelia version in ${lock}"
+    exit 1
+  fi
+  if [[ ! "${sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+    err "invalid Authelia digest in ${lock}"
+    exit 1
+  fi
+
+  AUTHELIA_IMAGE="${image}:${version}@sha256:${sha256}"
+}
+
 ensure_image() {
   if ! run_as_authelia podman image exists "${AUTHELIA_IMAGE}"; then
     run_as_authelia podman pull "${AUTHELIA_IMAGE}"
@@ -341,6 +388,10 @@ install_unit() {
   install -D -m 0644 -o root -g root \
     "${REPO_ROOT}/infra/configs/podman/authelia.container" \
     "${unit_dir}/authelia.container"
+  install -d -m 0755 "${unit_dir}/authelia.container.d"
+  printf 'Image=%s\n' "${AUTHELIA_IMAGE}" \
+    > "${unit_dir}/authelia.container.d/10-image.conf"
+  chmod 0644 "${unit_dir}/authelia.container.d/10-image.conf"
 }
 
 configure_selinux() {
@@ -413,6 +464,7 @@ main() {
 
   require_root
   require_commands
+  read_lock_image
   require_data_mount
   create_user
   enforce_subids

@@ -3,6 +3,7 @@ Description=Authelia SSO and MFA Gateway
 
 [Container]
 ContainerName=authelia
+# The deployment overrides this image with the locked digest.
 Image=authelia/authelia:4.39
 PublishPort=127.0.0.1:9091:9091
 EnvironmentFile=/data/authelia/env
