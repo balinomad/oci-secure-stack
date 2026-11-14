@@ -1,6 +1,7 @@
 #cloud-config
 # Target: Oracle Linux 9 (UEK7)
-# Stack: Traefik, Authelia, Cockpit, WireGuard (wg-easy), Podman Quadlet
+# Stack: Traefik, Authelia, Cockpit, WireGuard (wg-easy), Podman Quadlet,
+#        PCP, and optional Grafana/Valkey monitoring
 #
 # ==============================================================
 # TEMPLATE FILE — DO NOT USE DIRECTLY AS INSTANCE USER DATA
@@ -13,8 +14,9 @@
 #   2. Fill in all values in .env
 #   3. Run:
 #        export $(cat .env | xargs)
-#        envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
-#          < cloud-config.example.yaml > cloud-config.yaml
+#        scripts/repo/render-config.sh \
+#          | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE}' \
+#          > cloud-config.yaml
 #   4. Use cloud-config.yaml as instance user data
 #   5. Do not commit .env or cloud-config.yaml to version control
 #
@@ -33,19 +35,26 @@
 #   - Instance Principal IAM policy granting read on secret-family
 #     in the Vault compartment
 #
-#   OCI Vault (three secrets required):
+#   OCI Vault (three mandatory secrets, one optional):
 #   - Secret name: traefik-cloudflare-token  → Cloudflare DNS API token
 #   - Secret name: authelia-admin-password   → Authelia admin password
 #   - Secret name: wg-easy-admin-password    → wg-easy admin password
+#   - Secret name: grafana-admin-password    → Grafana admin password
+#     Required when MONITORING_PROFILE is live or history.
 #   See docs/guides/getting-started.md section 4 for setup steps.
+#
+#   Monitoring profiles:
+#   - live:    4 GB RAM, 2 vCPU, 2 GB free disk (default)
+#   - history: 6 GB RAM, 2 vCPU, 5 GB free disk (adds Valkey)
+#   - none:    PCP only
+#   See docs/reference/infrastructure.md section 8.
 #
 #   Cloudflare DNS (all records must exist before first boot):
 #   - auth.${DOMAIN}     A  <instance public IP>  DNS Only
-#   - traefik.${DOMAIN}  A  <instance public IP>  DNS Only
-#   - metrics.${DOMAIN}  A  <instance public IP>  DNS Only
 #   - cockpit.${DOMAIN}  A  <instance public IP>  DNS Only
 #   - wg.${DOMAIN}       A  <instance public IP>  DNS Only
 #   Admin subdomains must be DNS Only (grey cloud), not proxied.
+#   Grafana, Valkey, pmproxy, and raw metrics have no DNS records.
 #   See docs/guides/getting-started.md section 5 for full DNS setup.
 #
 # NOTE: 10.0.0.x in the wg-easy config is correct wg-easy syntax,
@@ -75,10 +84,14 @@ package_upgrade: true
 
 packages:
   - wireguard-tools # Host-based VPN tooling
-  - cockpit # Web console & monitoring
+  - cockpit # Web console
   - cockpit-storaged
   - cockpit-podman
+  - cockpit-pcp # Cockpit PCP metrics page
   - pcp # Performance Co-Pilot
+  - pcp-zeroconf # pmlogger and default archive setup
+  - pcp-pmda-podman # Rootful container metrics
+  - pcp-pmda-openmetrics # Traefik and application metrics
   - audit # Kernel audit daemon
   - policycoreutils-python-utils
   - iptables-nft # iptables compatibility on nftables (OL9)
@@ -153,6 +166,8 @@ runcmd:
       /data/logs/traefik \
       /data/logs/authelia \
       /data/containers/wg-easy \
+      /data/monitoring/grafana \
+      /data/monitoring/valkey \
       /data/apps \
       /etc/containers/systemd   # Quadlet unit files for app containers
 
@@ -248,6 +263,20 @@ runcmd:
       --query "data.secretBundleContent.content" \
       --raw-output | base64 -d)
 
+    if [ "${MONITORING_PROFILE}" != "none" ]; then
+      if [ -z "${GRAFANA_SECRET_OCID}" ]; then
+        echo "ERROR: GRAFANA_SECRET_OCID is required for the ${MONITORING_PROFILE} profile" >&2
+        exit 1
+      fi
+      GRAFANA_ADMIN_PASS=$(oci secrets secret-bundle get \
+        --secret-id "${GRAFANA_SECRET_OCID}" \
+        --query "data.secretBundleContent.content" \
+        --raw-output | base64 -d)
+      printf 'GF_SECURITY_ADMIN_PASSWORD=%s\n' "$GRAFANA_ADMIN_PASS" \
+        > /run/grafana-bootstrap.tmp
+      chmod 600 /run/grafana-bootstrap.tmp
+    fi
+
     echo "CF_DNS_API_TOKEN=$CF_TOKEN" > /etc/traefik/env
     chown traefik:traefik /etc/traefik/env
     chmod 600 /etc/traefik/env
@@ -258,6 +287,41 @@ runcmd:
     chmod 600 /run/authelia-bootstrap.tmp
     echo "$WG_ADMIN_PASS" > /run/wg-bootstrap.tmp
     chmod 600 /run/wg-bootstrap.tmp
+
+  # -----------------------------------------------------------
+  # PCP Export and Optional Monitoring UI
+  # pmproxy is the only Prometheus-compatible endpoint.
+  # Grafana and Valkey are loopback-only and have no Traefik route.
+  # -----------------------------------------------------------
+  - |
+    set -e
+
+    systemctl enable --now pmcd.service pmlogger.service pmproxy.service podman.socket
+
+    (cd /var/lib/pcp/pmdas/podman && ./Install)
+    (cd /var/lib/pcp/pmdas/openmetrics && ./Install)
+    systemd-tmpfiles --create /etc/tmpfiles.d/pcp-openmetrics.conf
+    systemctl restart pmcd.service pmproxy.service
+    systemctl enable --now pmie.service 2>/dev/null || true
+
+    if [ "${MONITORING_PROFILE}" != "none" ]; then
+      dnf install -y grafana grafana-pcp
+      install -d -m 0750 -o grafana -g grafana /data/monitoring/grafana
+      if [ ! -f /data/monitoring/grafana/env ]; then
+        install -m 0600 -o grafana -g grafana \
+          /run/grafana-bootstrap.tmp /data/monitoring/grafana/env
+      fi
+      rm -f /run/grafana-bootstrap.tmp
+      systemctl daemon-reload
+      systemctl enable --now grafana-server.service
+    fi
+
+    if [ "${MONITORING_PROFILE}" = "history" ]; then
+      dnf install -y valkey
+      install -d -m 0750 -o valkey -g valkey /data/monitoring/valkey
+      systemctl enable --now valkey.service
+      systemctl restart pmproxy.service
+    fi
 
   # -----------------------------------------------------------
   # Authelia First-Run Bootstrap
@@ -363,8 +427,9 @@ runcmd:
     semanage_fcontext -t bin_t "/usr/local/bin/traefik"
     semanage_fcontext -t etc_t "/etc/traefik(/.*)?"
     semanage_fcontext -t var_log_t "/data/logs/traefik(/.*)?"
+    semanage_fcontext -t var_lib_t "/data/monitoring(/.*)?"
     semanage_fcontext -t container_file_t "/data/authelia(/.*)?"
-    restorecon -Rv /usr/local/bin/ /etc/traefik/ /data/logs/traefik/ /data/authelia/
+    restorecon -Rv /usr/local/bin/ /etc/traefik/ /data/logs/traefik/ /data/authelia/ /data/monitoring/
     semanage port -a -t http_port_t -p tcp 8082 2>/dev/null || \
     semanage port -m -t http_port_t -p tcp 8082
 
@@ -428,7 +493,8 @@ runcmd:
 
   # -----------------------------------------------------------
   # Firewall Rules
-  # Port 8082 (metrics) intentionally omitted — internal only
+  # Traefik metrics (8082), pmproxy (44322), Grafana (3000),
+  # and Valkey (6379) are intentionally omitted. They are loopback-only.
   # -----------------------------------------------------------
   - |
     firewall-cmd --permanent --add-service={http,https}
@@ -439,12 +505,21 @@ runcmd:
   # Start Services
   # -----------------------------------------------------------
   - systemctl daemon-reload
-  - systemctl enable --now cockpit.socket traefik.service pmcd.service pmlogger.service
+  - systemctl enable --now cockpit.socket traefik.service pmcd.service pmlogger.service pmproxy.service
+  - systemctl enable --now pmie.service 2>/dev/null || true
   - systemctl restart cockpit.socket
   - systemctl enable wg-easy.service
   - |
     modprobe wireguard 2>/dev/null || true
     systemctl restart wg-easy.service
+  - |
+    if [ "${MONITORING_PROFILE}" != "none" ]; then
+      systemctl enable --now grafana-server.service
+    fi
+    if [ "${MONITORING_PROFILE}" = "history" ]; then
+      systemctl enable --now valkey.service
+      systemctl restart pmproxy.service
+    fi
 
   # -----------------------------------------------------------
   # Replay Application Deployment Manifests
@@ -467,4 +542,5 @@ runcmd:
   # -----------------------------------------------------------
   - |
     echo "Cloud-init execution complete. System is locked down and routing."
-    echo "Stack: Traefik, Authelia, Cockpit, wg-easy running."
+    echo "Stack: Traefik, Authelia, Cockpit, wg-easy, and PCP running."
+    echo "Monitoring profile: ${MONITORING_PROFILE}"

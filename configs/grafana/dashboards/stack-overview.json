@@ -1,0 +1,43 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "## Stack monitoring\n\nUse the dashboards bundled with the Grafana PCP plugin:\n\n- **PCP Vector Checklist** for live host metrics from `pmproxy`.\n- **PCP Redis** or **PCP Valkey** for history when the `history` profile is enabled.\n\nGrafana, `pmproxy`, and Valkey are loopback-only. Connect through an SSH tunnel.\n\nDo not add a public metrics route. See ADR-010.",
+        "mode": "markdown"
+      },
+      "title": "Monitoring entry points",
+      "type": "text"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": [
+    "pcp",
+    "stack"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Stack Overview",
+  "uid": "stack-overview",
+  "version": 1
+}

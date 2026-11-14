@@ -187,6 +187,150 @@ files:
     stage: true
     status: active
 
+  - source: configs/pcp/pmproxy.env
+    target: /etc/sysconfig/pmproxy
+    owner: root:root
+    mode: "0644"
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/pcp/openmetrics/traefik.url
+    target: /etc/pcp/openmetrics/traefik.url
+    owner: root:root
+    mode: "0644"
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/pcp-openmetrics.conf
+    target: /etc/tmpfiles.d/pcp-openmetrics.conf
+    owner: root:root
+    mode: "0644"
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/grafana-server.service.d/env.conf
+    target: /etc/systemd/system/grafana-server.service.d/env.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/grafana-server.service.d/data.conf
+    target: /etc/systemd/system/grafana-server.service.d/data.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/valkey.service.d/data.conf
+    target: /etc/systemd/system/valkey.service.d/data.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/grafana/grafana.ini
+    target: /etc/grafana/grafana.ini
+    owner: root:root
+    mode: "0644"
+    format: ini
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/grafana/provisioning/datasources/pcp.yml
+    target: /etc/grafana/provisioning/datasources/pcp.yml
+    owner: root:root
+    mode: "0644"
+    format: yaml
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/grafana/provisioning/dashboards/stack.yml
+    target: /etc/grafana/provisioning/dashboards/stack.yml
+    owner: root:root
+    mode: "0644"
+    format: yaml
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/grafana/dashboards/stack-overview.json
+    target: /etc/grafana/dashboards/stack-overview.json
+    owner: root:root
+    mode: "0644"
+    format: json
+    validate: jq
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/grafana/env.example
+    target: /data/monitoring/grafana/env
+    owner: grafana:grafana
+    mode: "0600"
+    format: text
+    validate: null
+    secret: true
+    generated: true
+    enabled: true
+    stage: false
+    status: active
+
+  - source: configs/valkey/valkey.conf
+    target: /etc/valkey/valkey.conf
+    owner: root:root
+    mode: "0644"
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
   - source: configs/prometheus/prometheus.yml
     target: /etc/prometheus/prometheus.yml
     owner: prometheus:prometheus

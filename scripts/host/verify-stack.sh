@@ -9,6 +9,7 @@
 #   - Cloud-init completion
 #   - Block volume mount and symlinks
 #   - Service health (Traefik, Authelia, wg-easy, Cockpit, PCP)
+#   - PCP export and optional Grafana/Valkey services
 #   - TLS certificate issuance
 #   - WireGuard interface
 #   - SELinux status and AVC denials
@@ -111,7 +112,9 @@ for dir in \
   /data/authelia/config \
   /data/authelia/db \
   /data/logs/traefik \
-  /data/containers/wg-easy; do
+  /data/containers/wg-easy \
+  /data/monitoring/grafana \
+  /data/monitoring/valkey; do
   if [[ -d "$dir" ]]; then
     pass "Directory exists: ${dir}"
   else
@@ -142,6 +145,7 @@ SERVICES=(
   "cockpit.socket"
   "pmcd.service"
   "pmlogger.service"
+  "pmproxy.service"
   "auditd.service"
 )
 
@@ -246,6 +250,72 @@ if [[ "$COCKPIT_BINDS" == "127.0.0.1:9090" ]]; then
   pass "Cockpit listens only on 127.0.0.1:9090"
 else
   fail "Cockpit must listen only on 127.0.0.1:9090 (observed: ${COCKPIT_BINDS:-no listener})"
+fi
+
+# --------------------------------------------------------------
+# 4.1 Monitoring
+# --------------------------------------------------------------
+header "4.1 Monitoring"
+
+if curl -fsS --max-time 5 http://127.0.0.1:8080/ping >/dev/null 2>&1; then
+  pass "Traefik API responds on 127.0.0.1:8080"
+else
+  fail "Traefik API does not respond on 127.0.0.1:8080"
+fi
+
+PMPROXY_BIND=$(ss -ltnH 2>/dev/null | awk '$4 ~ /:44322$/ {print $4}' || true)
+if [[ "$PMPROXY_BIND" == "127.0.0.1:44322" ]]; then
+  pass "pmproxy listens only on 127.0.0.1:44322"
+else
+  fail "pmproxy must listen only on 127.0.0.1:44322 (observed: ${PMPROXY_BIND:-no listener})"
+fi
+
+if curl -fsS --max-time 5 http://127.0.0.1:44322/metrics >/dev/null 2>&1; then
+  pass "PCP Prometheus endpoint responds on 127.0.0.1:44322"
+else
+  fail "PCP Prometheus endpoint does not respond on 127.0.0.1:44322"
+fi
+
+if pminfo -f containers.name >/dev/null 2>&1; then
+  pass "Podman PMDA returns container metrics"
+else
+  fail "Podman PMDA returns no container metrics"
+fi
+
+if pminfo -f openmetrics.control >/dev/null 2>&1; then
+  pass "OpenMetrics PMDA is available"
+else
+  fail "OpenMetrics PMDA is unavailable"
+fi
+
+if systemctl list-unit-files --no-legend grafana-server.service 2>/dev/null | grep -q '^grafana-server.service'; then
+  if systemctl is-active --quiet grafana-server.service; then
+    pass "grafana-server.service is active"
+  else
+    fail "grafana-server.service is not active"
+  fi
+  if curl -fsS --max-time 5 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+    pass "Grafana health endpoint responds on 127.0.0.1:3000"
+  else
+    fail "Grafana health endpoint does not respond on 127.0.0.1:3000"
+  fi
+else
+  warn "Grafana is not installed (MONITORING_PROFILE may be none)"
+fi
+
+if systemctl list-unit-files --no-legend valkey.service 2>/dev/null | grep -q '^valkey.service'; then
+  if systemctl is-active --quiet valkey.service; then
+    pass "valkey.service is active"
+  else
+    fail "valkey.service is not active"
+  fi
+  if valkey-cli -h 127.0.0.1 ping 2>/dev/null | grep -qx 'PONG'; then
+    pass "Valkey responds on 127.0.0.1"
+  else
+    fail "Valkey does not respond on 127.0.0.1"
+  fi
+else
+  warn "Valkey is not installed (history profile is not enabled)"
 fi
 
 # --------------------------------------------------------------
@@ -360,12 +430,13 @@ else
   pass "firewalld: no direct Cockpit access"
 fi
 
-# Port 8082 (metrics) should NOT be open externally
-if firewall-cmd --query-port=8082/tcp --permanent &>/dev/null; then
-  fail "firewalld: port 8082 (metrics) is open externally — this should be internal only"
-else
-  pass "firewalld: port 8082 (metrics) is correctly not exposed externally"
-fi
+for port in 3000 6379 8082 44322; do
+  if firewall-cmd --query-port="${port}/tcp" --permanent &>/dev/null; then
+    fail "firewalld: port ${port} is open externally; it must remain loopback-only"
+  else
+    pass "firewalld: port ${port} is correctly not exposed externally"
+  fi
+done
 
 # --------------------------------------------------------------
 # Summary

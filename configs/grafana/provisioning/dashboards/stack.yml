@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: stack
+    orgId: 1
+    folder: Stack
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards

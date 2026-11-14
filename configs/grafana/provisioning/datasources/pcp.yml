@@ -1,0 +1,18 @@
+apiVersion: 1
+
+datasources:
+  - name: PCP Vector
+    type: performancecopilot-vector-datasource
+    access: proxy
+    url: http://127.0.0.1:44322
+    isDefault: true
+    editable: false
+
+  # Oracle Linux 9 AppStream provides grafana-pcp 5.1.1. That version
+  # exposes the PCP Redis datasource, which is compatible with Valkey.
+  - name: PCP Valkey
+    type: performancecopilot-redis-datasource
+    access: proxy
+    url: http://127.0.0.1:44322
+    isDefault: false
+    editable: false
