@@ -3,8 +3,8 @@ name: "Document Conventions"
 description: |
   Working conventions for project documents, including status, version numbering, commit behavior, placement, and per-document independence.
 status: active
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # Document Conventions
@@ -18,8 +18,8 @@ Scope: every Markdown document under `docs/`.
 1. Version format is `MAJOR.MINOR`.
 2. Normal increments are minor only: `1.0` to `1.1`, `1.1` to `1.2`.
 3. Major increments happen only on explicit instruction. Do not increment the major version otherwise.
-4. Uncommitted documents do not change version. There is no version bump per edit.
-5. A document's version increments once when the document is committed.
+4. A document increments its minor version at most once per commit. If the current version already differs from the version recorded in the last commit, do not increment it again.
+5. Increment the minor version on the first content change after the last commit of the document. The increment takes effect in the next commit.
 6. The version increment is part of the same commit as the content change.
 7. Each document is versioned independently. Versions are never synchronized across documents.
 8. A commit represents at most one minor version change per changed document.
@@ -29,14 +29,16 @@ Scope: every Markdown document under `docs/`.
 
 ### Examples
 
-| Situation                               | Before       | After commit |
-| --------------------------------------- | ------------ | ------------ |
-| First commit of a new document          | `1.0`        | `1.0`        |
-| One substantive revision                | `1.0`        | `1.1`        |
-| Two documents changed in one commit     | `1.3`, `2.4` | `1.4`, `2.5` |
-| Document edited but not committed       | `1.4`        | `1.4`        |
-| Major rewrite without instruction       | `1.7`        | `1.8`        |
-| Major rewrite with explicit instruction | `1.7`        | `2.0`        |
+| Situation                                    | Before       | After commit |
+| -------------------------------------------- | ------------ | ------------ |
+| First commit of a new document               | `1.0`        | `1.0`        |
+| One substantive revision                     | `1.0`        | `1.1`        |
+| Two documents changed in one commit          | `1.3`, `2.4` | `1.4`, `2.5` |
+| New document, edited before its first commit | `1.0`        | `1.0`        |
+| Committed document, edit not yet committed   | `1.4`        | `1.5`        |
+| Same document, further edits before commit   | `1.5`        | `1.5`        |
+| Major rewrite without instruction            | `1.7`        | `1.8`        |
+| Major rewrite with explicit instruction      | `1.7`        | `2.0`        |
 
 ### Applying the convention
 
