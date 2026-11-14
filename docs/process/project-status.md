@@ -3,7 +3,7 @@ name: "Project Status Report"
 description: |
   Static assessment of repository state, documentation state, implementation status, risks, and explicit non-claims.
 status: active
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -17,7 +17,7 @@ Method: static analysis of repository files. No OCI deployment has been executed
 The documentation tree is consolidated. The implementation is still unproven.
 
 - The design record, guides, reference, and decision records now have one entry point each.
-- The implementation is a cloud-init template, a configuration source tree, and three scripts. None has deployment evidence.
+- The implementation is a cloud-init template, a configuration source tree, and a set of deployment and verification scripts. None has deployment evidence.
 - Several strategic decisions still contradict the implementation.
 - The goals are now stated in the architecture record but are not formally confirmed.
 - The legacy documentation tree is migrated in draft form and retained until the migration is verified.
@@ -35,7 +35,7 @@ This report covers the project defined in `docs/architecture.md`. It records rep
 | Cloud-init template    | Template with generated markers     | `infra/cloud-init/cloud-config.example.yaml`                                  |
 | Verification script    | Non-empty, shellcheck clean         | `scripts/host/verify-stack.sh`; `shellcheck scripts/host/verify-stack.sh`     |
 | Deployment script      | Non-empty, shellcheck clean         | `scripts/host/deploy-service.sh`; `shellcheck scripts/host/deploy-service.sh` |
-| Modular deploy scripts | Partial                             | `scripts/host/deploy/00-06` empty; `scripts/host/deploy/07-monitoring.sh` active |
+| Modular deploy scripts | Partial                             | `scripts/host/deploy/00-06` empty; `scripts/host/deploy/07-monitoring.sh` and `08-alerting.sh` active |
 | Extracted configs      | Populated, manifest and renderer    | `configs/manifest.yaml`; `scripts/repo/render-config.sh --check`              |
 | Documentation          | Consolidated, no empty placeholders | `README.md`, `docs/`                                                          |
 | Planning and research  | Substantive, kept as evidence       | `tmp/unverified/`, `tmp/legacy/work-plan.md`                                  |
@@ -81,12 +81,13 @@ Implemented in the monolith:
 - Verification and application deployment scripts
 - PCP export through `pmproxy`, the Podman PMDA, and the OpenMetrics PMDA
 - Optional Grafana and Valkey monitoring profiles, statically configured
+- Alert delivery through PCP `pmie`, systemd failure hooks, an HTTPS webhook, and an external heartbeat, statically configured
 
 Not implemented:
 
 - Terraform or any IaC for VCN, subnet, instance, block volume, Vault, IAM, DNS
 - Restic backup, timer, and backup secret
-- Health checks beyond PCP collection, alert delivery, certificate expiry monitoring
+- Health checks beyond the configured service checks and certificate expiry timer
 - CI, linting, schema validation, or tests
 - Changelog, releases, version-pin verification
 - Any deployment evidence
@@ -101,6 +102,7 @@ Not implemented:
 | The refactor proceeds before behaviour is proven                                        | Medium, rework                    | 85%              |
 | Version pins are unavailable or incompatible                                            | Medium, boot blocker              | Unverified       |
 | The consolidated guides are mistaken for proof of deployment                            | Medium, false confidence          | 80%              |
+| Alert delivery is configured but unproven                                               | Medium, missed failure            | 90% from code    |
 
 ## Explicit non-claims
 
@@ -110,6 +112,7 @@ This report does not claim:
 - That certificates are issued
 - That the VPN works
 - That Authelia authentication works
+- That alert delivery has been tested
 - That any finding marked unverified is a confirmed runtime failure
 
 Those claims require a disposable deployment and recorded evidence. The open questions are listed in `docs/process/issue-log.md`.

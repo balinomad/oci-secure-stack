@@ -3,7 +3,7 @@ name: "Issue Log"
 description: |
   Stable log of findings with severity, evidence, confidence, and status, plus runtime questions that require deployment tests.
 status: active
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -44,6 +44,7 @@ Legend: Open, Needs verification, Deferred, Fixed.
 | F27 | P1       | `docs/reference/traefik.md` claims exact static configuration that differs from the template: insecure dashboard, `/ping`, an 8080 entrypoint, and missing log settings.                | `docs/reference/traefik.md:12-80` versus `infra/cloud-init/cloud-config.example.yaml:95-130`                                                                               | 100%       | Open               |
 | F28 | P1       | `scripts/host/verify-stack.sh` treated a direct VPN rich rule for Cockpit as a pass. The static check now rejects direct access and requires a loopback bind; it is unproven until run. | `scripts/host/verify-stack.sh:244-248,355-361`                                                                                                                             | 100% code  | Needs verification |
 | F29 | P1       | ADR-005 requires rootless application deployment, but `deploy-service.sh` writes a rootful Quadlet unit with no `User=` and runs as root.                                               | `docs/decisions/005-application-contract.md:14-23`, `scripts/host/deploy-service.sh:109-123,187-206`                                                                       | 100%       | Open               |
+| F30 | P1       | No alert delivery path existed for service failure, resource thresholds, certificate expiry, or total instance loss. The static implementation adds `pmie`, systemd failure hooks, a webhook, and a heartbeat; delivery is unproven. | `configs/alerting/alerting.sh`, `configs/pcp/pmie/stack-alerts.pmie`, `configs/systemd/pcp-alert-pmie.service`, `configs/systemd/pcp-service-check.service`, `configs/systemd/pcp-cert-check.service`, `configs/systemd/pcp-heartbeat.service`, `docs/decisions/011-alert-delivery.md` | 100% code  | Needs verification |
 
 ## P2: governance and completeness
 

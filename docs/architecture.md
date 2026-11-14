@@ -3,7 +3,7 @@ name: "Architecture"
 description: |
   Project purpose, goals, principles, constraints, system architecture, security model, risks, and decision index for the OCI secure stack.
 status: draft
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -159,25 +159,28 @@ WireGuard and Traefik are parallel services. WireGuard provides the encrypted tu
 
 ### Component roles
 
-| Component         | Role                                   | Exposed port     | Authentication    |
-| ----------------- | -------------------------------------- | ---------------- | ----------------- |
-| Traefik           | Edge router, TLS termination, routing  | 80, 443 public   | None              |
-| WireGuard         | VPN tunnel for admin access            | 51820/UDP public | Peer public key   |
-| Authelia          | SSO and MFA gateway for admin routes   | Loopback 9091    | None              |
-| Traefik dashboard | Router, middleware, service inspection | Loopback 8080     | SSH tunnel        |
-| Traefik metrics   | Prometheus metrics endpoint            | Loopback 8082     | SSH tunnel        |
-| PCP               | Host, container, and OpenMetrics collection | Loopback 44322 | SSH tunnel     |
-| Grafana           | Local monitoring UI                    | Loopback 3000     | SSH tunnel        |
-| Valkey            | PCP history store, history profile     | Loopback 6379     | SSH tunnel        |
-| Cockpit           | Full OS web console                    | Through Traefik  | Authelia plus PAM |
-| wg-easy           | WireGuard peer management UI           | Through Traefik  | Authelia          |
-| Podman containers | Application workloads                  | Per application  | Per application   |
+| Component         | Role                                                | Exposed port     | Authentication    |
+| ----------------- | --------------------------------------------------- | ---------------- | ----------------- |
+| Traefik           | Edge router, TLS termination, routing               | 80, 443 public   | None              |
+| WireGuard         | VPN tunnel for admin access                         | 51820/UDP public | Peer public key   |
+| Authelia          | SSO and MFA gateway for admin routes                | Loopback 9091    | None              |
+| Traefik dashboard | Router, middleware, service inspection              | Loopback 8080    | SSH tunnel        |
+| Traefik metrics   | Prometheus metrics endpoint                         | Loopback 8082    | SSH tunnel        |
+| PCP               | Host, rootful container, and OpenMetrics collection | Loopback 44322   | SSH tunnel        |
+| Grafana           | Local monitoring UI                                 | Loopback 3000    | SSH tunnel        |
+| Valkey            | PCP history store, history profile                  | Loopback 6379    | SSH tunnel        |
+| Alert delivery    | pmie thresholds, service checks, webhook, heartbeat | Outbound HTTPS   | Webhook and heartbeat secrets |
+| Cockpit           | Full OS web console                                 | Through Traefik  | Authelia plus PAM |
+| wg-easy           | WireGuard peer management UI                        | Through Traefik  | Authelia          |
+| Podman containers | Application workloads                               | Per application  | Per application   |
 
 Authelia runs as a rootless Quadlet user unit. wg-easy runs as a rootful Quadlet system unit inside a user namespace with only `NET_ADMIN` and `NET_RAW`. Traefik runs as a native systemd service. See ADR-002, ADR-008, and ADR-009.
 
 The monitoring data plane is PCP. `pmcd` collects host metrics, `pmlogger` writes archives, and `pmproxy` exposes the only Prometheus-compatible endpoint on `127.0.0.1:44322`. The Podman PMDA covers rootful containers. The OpenMetrics PMDA reads Traefik metrics from `127.0.0.1:8082`.
 
 The default `live` monitoring profile adds Grafana with the PCP Vector datasource. The optional `history` profile adds Valkey for PCP `pmseries` retention. Grafana, Valkey, and `pmproxy` are loopback-only and have no Traefik route. The exact capacity minimums and profiles are canonical in `docs/reference/infrastructure.md` section 8 and recorded in ADR-010.
+
+Alert delivery uses the PCP `pmie` engine, systemd failure hooks, one HTTPS webhook, and an external heartbeat. It adds no inbound listener and no Traefik route. The exact thresholds, timers, and secret names are canonical in `docs/reference/infrastructure.md` section 9 and recorded in ADR-011.
 
 The exposure model is defined in ADR-001. The static configuration binds the dashboard and raw metrics to loopback. It binds Cockpit to loopback and proxies it through Traefik behind Authelia and PAM. Deployment verification is pending. Any future management-plane exposure requires a new ADR.
 
@@ -237,6 +240,7 @@ Corporate firewalls and hotels can block outbound UDP on non-standard ports. If 
 | Traefik metrics    | Loopback only, accessed through an SSH tunnel                                       |
 | PCP and Grafana    | Loopback only, accessed through an SSH tunnel; Grafana login                        |
 | Valkey history     | Loopback only; local administration only, history profile                           |
+| Alert delivery     | Outbound HTTPS only; webhook and heartbeat secrets from OCI Vault                   |
 | Cockpit            | VPN subnet, Authelia password plus TOTP, then Cockpit PAM                           |
 | wg-easy            | VPN subnet, Authelia password plus TOTP                                             |
 | Public app routes  | TLS via Let's Encrypt, plus per-application authentication                          |
@@ -276,6 +280,7 @@ Open findings and technical debt are tracked in `docs/process/issue-log.md`. The
 - A failed block volume mount may silently produce an ephemeral deployment.
 - The implemented admin exposure model may bypass the stated security model.
 - PCP export, Grafana, and Valkey are configured but unproven on a deployment.
+- Alert delivery is configured but no webhook delivery, service failure, or stopped-instance heartbeat has been proven.
 - The refactor may proceed before behaviour is proven.
 - Version pins may be unavailable or incompatible.
 
@@ -295,8 +300,9 @@ These risks are not confirmed runtime failures until a deployment test produces 
 | ADR-008 | Traefik runtime                      | Draft  |
 | ADR-009 | Infrastructure container runtime     | Draft  |
 | ADR-010 | Local monitoring UI and history      | Draft  |
+| ADR-011 | Alert delivery                       | Draft  |
 
-ADR-006 and ADR-007 remain draft. ADR-009 and ADR-010 are decided in content and remain draft until committed and confirmed.
+ADR-006 and ADR-007 remain draft. ADR-009, ADR-010, and ADR-011 are decided in content and remain draft until committed and confirmed.
 
 ## Related documents
 

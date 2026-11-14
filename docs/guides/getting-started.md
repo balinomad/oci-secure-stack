@@ -3,7 +3,7 @@ name: "Getting Started"
 description: |
   End-to-end tutorial for provisioning the OCI secure stack from a clean Oracle Cloud Infrastructure environment.
 status: draft
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -21,7 +21,7 @@ All of the following must exist before the instance is launched. Cloud-init cann
 - An OCI compute instance with Oracle Linux 9. AMD and ARM shapes are supported.
 - A block volume attached as paravirtualized, 50 GB minimum.
 - An instance dynamic group and IAM policy that allow `read secret-family` in the Vault compartment.
-- An OCI Vault with three mandatory secrets and one Grafana secret for the `live` or `history` profile.
+- An OCI Vault with five mandatory secrets and one optional Grafana secret for the `live` or `history` profile.
 - A Cloudflare zone and an API token with `Zone → DNS → Edit` permission on that zone.
 - DNS records for every hostname in section 5.
 - A workstation with `yq` v4 and `envsubst` for rendering the deployment file.
@@ -65,9 +65,11 @@ The template uses `${VARIABLE}` syntax for site-specific values. All other `${..
 | `${AUTH_SECRET_OCID}` | OCID of the Authelia admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..yyyy` |
 | `${WG_SECRET_OCID}`   | OCID of the wg-easy admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..zzzz` |
 | `${GRAFANA_SECRET_OCID}` | OCID of the Grafana admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..gggg` |
+| `${ALERT_WEBHOOK_SECRET_OCID}` | OCID of the alert webhook secret in OCI Vault | `ocid1.vaultsecret.oc1..aaaa` |
+| `${ALERT_HEARTBEAT_SECRET_OCID}` | OCID of the alert heartbeat secret in OCI Vault | `ocid1.vaultsecret.oc1..bbbb` |
 | `${MONITORING_PROFILE}` | Monitoring profile: `live`, `history`, or `none`        | `live`                        |
 
-`${GRAFANA_SECRET_OCID}` is required when `${MONITORING_PROFILE}` is `live` or `history`.
+`${GRAFANA_SECRET_OCID}` is required when `${MONITORING_PROFILE}` is `live` or `history`. The alert secret OCIDs are required in every profile.
 
 The following hostnames are derived from `${DOMAIN}`:
 
@@ -87,12 +89,14 @@ CF_SECRET_OCID=ocid1.vaultsecret.oc1..xxxx
 AUTH_SECRET_OCID=ocid1.vaultsecret.oc1..yyyy
 WG_SECRET_OCID=ocid1.vaultsecret.oc1..zzzz
 GRAFANA_SECRET_OCID=ocid1.vaultsecret.oc1..gggg
+ALERT_WEBHOOK_SECRET_OCID=ocid1.vaultsecret.oc1..aaaa
+ALERT_HEARTBEAT_SECRET_OCID=ocid1.vaultsecret.oc1..bbbb
 MONITORING_PROFILE=live
 ```
 
 ## 4. Create OCI Vault secrets
 
-The cloud-init script fetches three mandatory secrets and the Grafana secret at first boot with Instance Principal authentication. No credentials are embedded in the template.
+The cloud-init script fetches five mandatory secrets and the Grafana secret at first boot with Instance Principal authentication. No credentials are embedded in the template.
 
 ### 4.1 IAM policy
 
@@ -151,7 +155,33 @@ This secret is required when `MONITORING_PROFILE` is `live` or `history`.
 
 Cloud-init writes the password to `/data/monitoring/grafana/env` with mode `0600` and owner `grafana:grafana`. It does not write the password to a tracked file or the system journal.
 
-Verify secret access after boot:
+### 4.6 Alert webhook URL
+
+This secret is required in every monitoring profile. It is the HTTPS endpoint that receives alert notifications.
+
+1. Create a webhook receiver at the chosen provider.
+2. Copy the full HTTPS webhook URL.
+3. Create a Vault secret named `alert-webhook-url` with the URL as plain text.
+4. Copy the secret OCID. This is `${ALERT_WEBHOOK_SECRET_OCID}`.
+
+Cloud-init writes the value to `/data/monitoring/alerting/env` with mode `0600` and owner `alerting:alerting`. The URL is not written to a tracked file or the system journal.
+
+### 4.7 External heartbeat URL
+
+This secret is required in every monitoring profile. It is the HTTPS ping endpoint that proves the instance is alive.
+
+1. Create a check at the chosen heartbeat provider.
+2. Copy the full HTTPS ping URL.
+3. Create a Vault secret named `alert-heartbeat-url` with the URL as plain text.
+4. Copy the secret OCID. This is `${ALERT_HEARTBEAT_SECRET_OCID}`.
+
+Cloud-init writes the value to `/data/monitoring/alerting/env` with mode `0600` and owner `alerting:alerting`. The same file contains the webhook URL. The URL is not written to a tracked file or the system journal.
+
+The provider should alert when no heartbeat arrives for two consecutive five-minute intervals. The heartbeat does not replace the local checks. It detects a total instance or network loss.
+
+### 4.8 Verify Cloudflare secret access after boot
+
+Run this check after boot:
 
 ```bash
 oci secrets secret-bundle get \
@@ -180,13 +210,13 @@ A wildcard record means new application services resolve without adding individu
 
 ## 6. Render the deployment file
 
-Create `.env` as described in section 3. Render the component configuration into the cloud-config template, then substitute only the eight template variables. The renderer requires `yq` v4. Pass only the eight variables to `envsubst` so shell variables inside `runcmd` remain intact.
+Create `.env` as described in section 3. Render the component configuration into the cloud-config template, then substitute only the ten template variables. The renderer requires `yq` v4. Pass only the ten variables to `envsubst` so shell variables inside `runcmd` remain intact.
 
 ```bash
 export $(cat .env | xargs)
 
 scripts/repo/render-config.sh \
-  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE}' \
+  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
   > cloud-config.yaml
 ```
 
@@ -232,7 +262,7 @@ Run the automated verification script from a checkout of this repository on the 
 sudo ./scripts/host/verify-stack.sh
 ```
 
-Exit code `0` means all checks passed. Exit code `1` means one or more checks failed. The script covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, PCP export, optional Grafana and Valkey services, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
+Exit code `0` means all checks passed. Exit code `1` means one or more checks failed. The script covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, PCP export, optional Grafana and Valkey services, alert delivery, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
 
 If a check fails, see `docs/guides/operations.md` for component checks and common failure patterns.
 
@@ -275,6 +305,15 @@ ssh -L 3000:127.0.0.1:3000 \
 ```
 
 Then open `http://localhost:8080/dashboard/`, `http://localhost:8082/metrics`, and `http://localhost:3000`. Log in to Grafana with the user `admin` and the `grafana-admin-password` value from OCI Vault.
+
+Confirm that alert delivery works:
+
+```bash
+sudo systemctl start pcp-alert-notify@test.service
+sudo systemctl status pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+```
+
+The webhook receiver must show one test alert. The external heartbeat provider must show a recent ping. A stopped-instance test is the only proof that the provider detects total loss.
 
 If `MONITORING_PROFILE=history`, confirm the history service:
 

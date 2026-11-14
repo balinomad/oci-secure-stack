@@ -3,7 +3,7 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -33,7 +33,7 @@ The renderer requires `yq` v4.
 ```bash
 export $(cat .env | xargs)
 scripts/repo/render-config.sh \
-  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE}' \
+  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
   > cloud-config.yaml
 
 yamllint cloud-config.yaml
@@ -66,7 +66,7 @@ This validates the cloud-init key structure but does not execute anything. It re
 
 ### 1.5 Variable completeness
 
-Verify that all eight variables are present and non-empty:
+Verify that all required variables are present and non-empty:
 
 ```bash
 while IFS='=' read -r key value; do
@@ -78,6 +78,8 @@ while IFS='=' read -r key value; do
   fi
 done < .env
 ```
+
+`GRAFANA_SECRET_OCID` may be empty when `MONITORING_PROFILE=none`.
 
 ## 2. Test a change incrementally
 
@@ -121,7 +123,7 @@ Once all blocks pass, run `sudo ./scripts/host/verify-stack.sh`.
 
 ## 3. Verify a deployment
 
-The `scripts/host/verify-stack.sh` script runs the checks in sequence and produces a pass or fail summary. It covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, PCP export, optional Grafana and Valkey services, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
+The `scripts/host/verify-stack.sh` script runs the checks in sequence and produces a pass or fail summary. It covers boot volume expansion, cloud-init status, block volume mount, symlinks, service health, PCP export, optional Grafana and Valkey services, alert delivery, TLS certificates, WireGuard, SELinux, journal persistence, and firewall rules.
 
 From a checkout of this repository on the instance:
 
@@ -283,7 +285,7 @@ pminfo -f containers.name
 pminfo -f openmetrics.control
 ```
 
-Expected: `pmproxy` listens on `127.0.0.1:44322`, the metrics request succeeds, and both PMDAs return metric data. The Podman PMDA covers rootful containers only. Rootless Authelia metrics are not collected.
+Expected: `pmproxy` listens on `127.0.0.1:44322`, the metrics request succeeds, and both PMDAs return metric data. The Podman PMDA covers rootful containers only. Rootless Authelia and rootless application containers are not collected. Section 4.7.1 lists the compensating checks.
 
 For the `live` or `history` profile:
 
@@ -307,6 +309,66 @@ valkey-cli -h 127.0.0.1 info memory
 Expected: `PONG`, a loopback listener, and memory use below the 512 MB cap. A `noeviction` error means the history store is full. Increase the cap only after increasing total RAM.
 
 The monitoring profile and capacity minimums are canonical in `docs/reference/infrastructure.md` section 8.
+
+### 4.7.1 Rootless container visibility
+
+The Podman PMDA does not collect rootless container metrics. Use these checks for Authelia and rootless application containers:
+
+- Authelia health response and user unit state, as shown in section 4.2.
+- Application OpenMetrics ingestion, as described in `docs/guides/adding-apps.md` section 12.
+- Application and Authelia logs through journald.
+- On-demand resource use with `podman stats`.
+
+For Authelia:
+
+```bash
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
+  podman stats --no-stream
+```
+
+For a rootless application, run the same command as its service user. Grafana does not show these containers because the PCP data plane has no rootless container series. The two-minute service check covers Authelia through its loopback health endpoint and covers core system units. Application service failure detection remains with the application `/metrics` endpoint, journald, and manual checks.
+
+### 4.7.2 Alert delivery
+
+Check the alerting components:
+
+```bash
+systemctl status pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+sudo runuser -u alerting -- pmie -C -c /etc/pcp/pmie/stack-alerts.pmie
+ls -l /data/monitoring/alerting/env
+systemctl list-timers pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+```
+
+Expected: the service and all timers are active, `pmie` accepts the rules, and the environment file is owned by `alerting` with mode `0600`.
+
+Send a test alert:
+
+```bash
+sudo systemctl start pcp-alert-notify@test.service
+```
+
+The webhook receiver must show one alert. To test a service failure, stop a non-critical unit. The `OnFailure=` hook sends an immediate alert, and the next service check confirms the state. Do not stop Traefik or Authelia on a production instance.
+
+The external heartbeat is the only control that detects total instance loss. Confirm the provider shows a recent ping. A stopped-instance test requires a disposable environment.
+
+To disable alert delivery:
+
+```bash
+sudo systemctl disable --now pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+```
+
+Re-enable it with `sudo ./scripts/host/deploy/08-alerting.sh`. The helper preserves an existing `/data/monitoring/alerting/env`.
+
+If no alert arrives, check:
+
+```bash
+sudo journalctl -u pcp-alert-pmie -u pcp-alert-notify@test.service -n 50
+sudo systemctl status pcp-alert-pmie
+sudo ls -l /data/monitoring/alerting/env
+sudo ss -tnp | grep ':443'
+```
+
+A webhook URL that is empty, not HTTPS, or rejected by the receiver is the most common cause. A missing `alerting` user or a wrong environment file owner causes the notifier to fail before it sends.
 
 ### 4.8 Access the dashboard, metrics, and monitoring UI
 
@@ -524,6 +586,30 @@ systemctl status valkey
 valkey-cli -h 127.0.0.1 ping
 ```
 
+### Alerts are not delivered
+
+**Symptom:** A service is down or a threshold is exceeded, but the webhook receiver shows no alert.
+
+**Causes:**
+
+- `/data/monitoring/alerting/env` is missing, empty, or not owned by `alerting`.
+- The webhook URL is not HTTPS or the receiver rejects the request.
+- `pcp-alert-pmie.service` or a timer is inactive.
+- The `alerting` user does not exist.
+- The external heartbeat provider is not configured.
+
+**Checks:**
+
+```bash
+systemctl status pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+sudo journalctl -u pcp-alert-pmie -u pcp-alert-notify@test.service -n 100
+sudo ls -l /data/monitoring/alerting/env
+id alerting
+sudo systemctl start pcp-alert-notify@test.service
+```
+
+Do not print the environment file. It contains two live secret URLs.
+
 ### SELinux blocks a service
 
 **Symptom:** A service starts but behaves incorrectly, and `ausearch` shows denials.
@@ -658,6 +744,39 @@ sudo systemctl restart grafana-server
 
 Changing the environment file does not change an existing Grafana admin password in the database. Use the Grafana user administration page to change the stored password, or reset it with `grafana-cli` after confirming the supported syntax for the installed version.
 
+### 9.4 Alert webhook and heartbeat URLs
+
+1. Create a new webhook URL or heartbeat URL at the provider.
+2. Add a new secret version in OCI Vault for `alert-webhook-url` or `alert-heartbeat-url`.
+3. Fetch the new values on the instance:
+
+```bash
+NEW_WEBHOOK=$(oci secrets secret-bundle get \
+  --secret-id <ALERT_WEBHOOK_SECRET_OCID> \
+  --query "data.secretBundleContent.content" \
+  --raw-output | base64 -d)
+NEW_HEARTBEAT=$(oci secrets secret-bundle get \
+  --secret-id <ALERT_HEARTBEAT_SECRET_OCID> \
+  --query "data.secretBundleContent.content" \
+  --raw-output | base64 -d)
+```
+
+4. Replace the environment file without printing the values:
+
+```bash
+{
+  printf 'ALERT_WEBHOOK_URL=%q\n' "$NEW_WEBHOOK"
+  printf 'ALERT_HEARTBEAT_URL=%q\n' "$NEW_HEARTBEAT"
+} | sudo tee /data/monitoring/alerting/env >/dev/null
+sudo chown alerting:alerting /data/monitoring/alerting/env
+sudo chmod 0600 /data/monitoring/alerting/env
+sudo systemctl restart pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+```
+
+5. Send a test alert and confirm the heartbeat provider shows a new ping.
+
+A leaked webhook URL permits alert injection. Rotate it immediately if the URL appears in a log, ticket, or chat message. The heartbeat URL is also a secret because it can be used to suppress an external alert.
+
 ## 10. Replace the VM
 
 1. Note the block volume OCID and attachment details.
@@ -777,6 +896,11 @@ grep '^authelia:' /etc/subuid /etc/subgid
 ls -ld /data/authelia /data/containers/wg-easy
 ls -ld /data/monitoring/grafana /data/monitoring/valkey
 ls -l /data/monitoring/grafana/env
+ls -ld /data/monitoring/alerting
+ls -l /data/monitoring/alerting/env
+id alerting
+getent passwd alerting
+systemctl status pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 ls -l /etc/containers/systemd/wg-easy.container
 sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
   systemctl --user is-active authelia.service
@@ -795,6 +919,9 @@ Expected posture:
 - `/data/traefik/letsencrypt/acme.json` is mode `0600`.
 - `/etc/traefik/env` is mode `0600` and owned by `traefik:traefik`.
 - `/data/monitoring/grafana/env` is mode `0600` and owned by `grafana:grafana`.
+- `/data/monitoring/alerting/env` is mode `0600` and owned by `alerting:alerting`.
+- The alerting user has no login shell and the alerting timers are active.
+- Alert delivery uses outbound HTTPS only and has no inbound listener.
 - `/opt/traefik` and `/etc/traefik` are owned by root.
 - Dashboard, metrics, `pmproxy`, Grafana, and Valkey are loopback-only.
 - Grafana and Valkey have no Traefik routes and no public firewall ports.

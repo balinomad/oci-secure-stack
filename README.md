@@ -18,6 +18,7 @@ The stack is designed but not yet proven in a deployment. See [docs/process/proj
 | **PCP**                 | Performance Co-Pilot for host, container, and OpenMetrics collection            |
 | **Grafana**             | Local live monitoring UI over PCP, loopback-only, live profile                  |
 | **Valkey**              | PCP history store, loopback-only, history profile                               |
+| **Alert delivery**      | PCP pmie, systemd failure hooks, HTTPS webhook, external heartbeat              |
 
 All state, including certificates, user accounts, WireGuard keys, and container data, lives on a separately attached block volume. The VM is treated as disposable.
 
@@ -36,13 +37,13 @@ All state, including certificates, user accounts, WireGuard keys, and container 
 ## Quick start
 
 1. Create the OCI network, block volume, Vault secrets, and DNS records. Follow [docs/guides/getting-started.md](docs/guides/getting-started.md).
-2. Copy `.env.example` to `.env` and fill in the eight values. Set `MONITORING_PROFILE` to `live`, `history`, or `none`.
+2. Copy `.env.example` to `.env` and fill in the required values. Set `MONITORING_PROFILE` to `live`, `history`, or `none`.
 3. Render the deployment file:
 
    ```bash
    export $(cat .env | xargs)
    scripts/repo/render-config.sh \
-     | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE}' \
+     | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
      > cloud-config.yaml
    ```
 
@@ -58,6 +59,7 @@ The design requires the following controls. The current implementation does not 
 - Only TCP 80, TCP 443, and UDP 51820 are publicly reachable.
 - Administrative routes require a WireGuard peer and Authelia password plus TOTP. Traefik returns `403` to requests outside the VPN subnet before it consults authentication.
 - The Traefik dashboard, Traefik metrics, PCP `pmproxy`, Grafana, and Valkey bind to loopback and do not have public routes.
+- Alert delivery uses outbound HTTPS only. The webhook and heartbeat URLs are stored in OCI Vault and are not committed to the repository.
 - Traefik issues TLS certificates through Let's Encrypt DNS-01 with a Cloudflare token stored in OCI Vault.
 - Cloud-init fetches secrets at boot with Instance Principal authentication. Contributors do not commit secrets to the repository.
 - SELinux runs in enforcing mode. Traefik runs as a dedicated system user with minimal capabilities.
@@ -86,6 +88,7 @@ The full security model, threat model, and non-goals are in [docs/architecture.m
 | `.env.example`                               | Variable template; copy to `.env` and fill in values          |
 | `scripts/host/deploy-service.sh`             | Deploy a new Podman container service                         |
 | `scripts/host/deploy/07-monitoring.sh`       | Install or change the local monitoring profile                |
+| `scripts/host/deploy/08-alerting.sh`         | Install or update alert delivery                              |
 | `scripts/host/verify-stack.sh`               | Post-deployment verification                                  |
 | `docs/`                                      | Design, decisions, guides, reference, and process records     |
 

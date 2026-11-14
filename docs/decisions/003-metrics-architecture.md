@@ -3,7 +3,7 @@ name: "ADR-003: Metrics Architecture"
 description: |
   Decision to use PCP-native metrics export instead of a full Prometheus server, with all endpoints bound to loopback.
 status: draft
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -38,7 +38,7 @@ The design requires PCP host metrics on a loopback endpoint and no public `metri
 ## Consequences of each option
 
 - Option 1: the public metrics route remains. F8 remains open, and host metrics are unavailable.
-- Option 2: there is no long-term TSDB and no built-in alerting. Operators use PCP or an SSH tunnel, and the metrics route is removed.
+- Option 2: there is no long-term Prometheus TSDB and no Prometheus Alertmanager. Local alerting is defined in ADR-011. Operators use PCP or an SSH tunnel, and the metrics route is removed.
 - Option 3: full metrics and alerting are available. Resource use and operational overhead increase, and the capacity is unnecessary for the Free Tier instance.
 
 ## Recommendation
@@ -57,7 +57,7 @@ Adopt option 2.
 
 ## Consequences
 
-- The stack has no long-term Prometheus TSDB and no built-in alerting.
+- The stack has no long-term Prometheus TSDB and no Prometheus Alertmanager. Local alert delivery is defined in ADR-011.
 - Operators use PCP tooling, Grafana through an SSH tunnel, or a future external Prometheus server.
 - The static configuration has no metrics route.
 - The local Grafana presentation and optional Valkey retention are defined in ADR-010.
@@ -67,4 +67,5 @@ Adopt option 2.
 
 - `tmp/unverified/component-research.md`
 - `docs/decisions/010-monitoring-presentation.md`
+- `docs/decisions/011-alert-delivery.md`
 - `docs/process/issue-log.md` F8

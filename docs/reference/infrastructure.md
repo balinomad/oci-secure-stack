@@ -3,7 +3,7 @@ name: "Infrastructure Reference"
 description: |
   Exact template variables, OCI network rules, DNS records, Vault secrets, persistent storage layout, and reserved ports for the stack.
 status: draft
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -24,9 +24,11 @@ This page documents the OCI infrastructure and host baseline for the stack. See 
 | `${AUTH_SECRET_OCID}` | OCID of the Authelia admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..yyyy` |
 | `${WG_SECRET_OCID}`   | OCID of the wg-easy admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..zzzz` |
 | `${GRAFANA_SECRET_OCID}` | OCID of the Grafana admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..gggg` |
+| `${ALERT_WEBHOOK_SECRET_OCID}` | OCID of the alert webhook secret in OCI Vault | `ocid1.vaultsecret.oc1..aaaa` |
+| `${ALERT_HEARTBEAT_SECRET_OCID}` | OCID of the alert heartbeat secret in OCI Vault | `ocid1.vaultsecret.oc1..bbbb` |
 | `${MONITORING_PROFILE}` | Monitoring profile: `live`, `history`, or `none`        | `live`                        |
 
-`${GRAFANA_SECRET_OCID}` is required when `${MONITORING_PROFILE}` is `live` or `history`.
+`${GRAFANA_SECRET_OCID}` is required when `${MONITORING_PROFILE}` is `live` or `history`. The two alert secret OCIDs are required in every profile.
 
 Derived hostnames:
 
@@ -69,6 +71,8 @@ Admin subdomains must be DNS Only. Cloudflare proxying makes Cloudflare IPs appe
 | `authelia-admin-password`  | Initial Authelia admin password | `${AUTH_SECRET_OCID}`   |
 | `wg-easy-admin-password`   | Initial wg-easy admin password  | `${WG_SECRET_OCID}`     |
 | `grafana-admin-password`   | Grafana admin password          | `${GRAFANA_SECRET_OCID}` |
+| `alert-webhook-url`        | HTTPS alert delivery webhook    | `${ALERT_WEBHOOK_SECRET_OCID}` |
+| `alert-heartbeat-url`      | External heartbeat endpoint     | `${ALERT_HEARTBEAT_SECRET_OCID}` |
 
 IAM policy:
 
@@ -96,7 +100,8 @@ Cloud-init detects the block device in this order: `/dev/oracleoci/oraclevdb`, `
 │   └── <app-name>/          # per-application data
 ├── monitoring/
 │   ├── grafana/             # Grafana database and state, owner grafana
-│   └── valkey/              # PCP history, owner valkey, history profile only
+│   ├── valkey/              # PCP history, owner valkey, history profile only
+│   └── alerting/            # Alerting webhook and heartbeat secrets, owner alerting
 └── logs/
     └── traefik/             # Traefik access and error logs
 ```
@@ -110,13 +115,14 @@ Symlinks:
 
 Authelia and wg-easy bind-mount their data directly from `/data/`. `/data/authelia` is owned by `authelia:authelia`. `/data/containers/wg-easy` is owned by host UID and GID `300000`.
 
-`/data/monitoring/grafana` is owned by `grafana:grafana`. `/data/monitoring/valkey` is owned by `valkey:valkey` and exists only in the `history` profile. The monitoring directories use the `var_lib_t` SELinux type.
+`/data/monitoring/grafana` is owned by `grafana:grafana`. `/data/monitoring/valkey` is owned by `valkey:valkey` and exists only in the `history` profile. `/data/monitoring/alerting` is owned by `alerting:alerting`. The monitoring directories use the `var_lib_t` SELinux type.
 
 ### 5.1 Service accounts and Quadlet paths
 
 | Account  | Host user    | ID mapping                             | Service                                         |
 | -------- | ------------ | -------------------------------------- | ----------------------------------------------- |
 | authelia | System user  | Subordinate `400000-465535`            | Rootless Quadlet user unit                      |
+| alerting | System user  | None                                   | Native systemd alerting services and timers     |
 | traefik  | System user  | None                                   | Native systemd service                          |
 | wg-easy  | No host user | Container root to host `300000-365535` | Rootful Quadlet system unit in a user namespace |
 
@@ -147,6 +153,8 @@ The OS, Traefik binary, and container images are recreated.
 | 51820 | WireGuard, UDP                       |
 | 51821 | wg-easy management UI                |
 
+Alert delivery adds no reserved inbound port. The notifier and heartbeat use outbound TCP 443 only.
+
 ## 7. Host packages
 
 The template installs these package groups.
@@ -157,6 +165,7 @@ The template installs these package groups.
 | `cockpit-storaged`      | Base       | Storage management page                      |
 | `cockpit-podman`        | Base       | Podman container management page             |
 | `cockpit-pcp`           | Monitoring | Cockpit PCP metrics page                     |
+| `jq`                    | Base       | JSON payload and ACME state parsing          |
 | `pcp`                   | Monitoring | Performance Co-Pilot collector               |
 | `pcp-zeroconf`          | Monitoring | `pmlogger` and default archive setup         |
 | `pcp-pmda-podman`       | Monitoring | Rootful container metrics                    |
@@ -207,7 +216,9 @@ The live profile fits a 2 OCPU and 4 GB instance. The history profile requires a
 
 `pmproxy` binds to `127.0.0.1:44322`. It is the only Prometheus-compatible endpoint. An external Prometheus server can scrape it later through a secure tunnel. No external server is deployed now.
 
-The OpenMetrics PMDA reads `http://127.0.0.1:8082/metrics` through `/etc/pcp/openmetrics/traefik.url`. The Podman PMDA requires `podman.socket`. It collects rootful container metrics only. Rootless Authelia metrics are not included.
+Alert delivery uses a dedicated `pcp-alert-pmie.service` with the same `pmie` binary. Section 9 is the canonical statement of alert thresholds, units, timers, and secrets.
+
+The OpenMetrics PMDA reads `http://127.0.0.1:8082/metrics` through `/etc/pcp/openmetrics/traefik.url`. The Podman PMDA requires `podman.socket`. It collects rootful container metrics only. Rootless Authelia and rootless application containers are not included. Use Authelia health checks, application OpenMetrics, journald, and on-demand `podman stats` for those workloads.
 
 ### 8.4 Live profile
 
@@ -295,10 +306,68 @@ valkey-cli -h 127.0.0.1 ping
 
 The expected `valkey-cli` response is `PONG`. The expected Grafana health response contains `"database": "ok"`.
 
+## 9. Alert delivery
+
+This section is the canonical statement of alert delivery requirements. ADR-011 records the decision.
+
+### 9.1 Components
+
+| Component | Role | Identity |
+| --- | --- | --- |
+| `pcp-alert-pmie.service` | Evaluates the `pmie` threshold rules | `alerting` |
+| `pcp-alert-notify@.service` | Sends a unit failure alert | `alerting` |
+| `pcp-service-check.service` | Checks core units, Traefik health, and Authelia health | `alerting` |
+| `pcp-cert-check.service` | Checks the earliest certificate expiry | `root`, hardened |
+| `pcp-heartbeat.service` | Sends the external heartbeat | `alerting` |
+
+The `pmie` rules are in `/etc/pcp/pmie/stack-alerts.pmie`. The service list is `/etc/pcp/alerting/services.list`. The notifier is `/usr/local/libexec/stack-alerting`.
+
+`pcp-cert-check.service` is the only alerting component that runs as root. This is a narrow one-shot exception because `/data/traefik/letsencrypt/acme.json` contains private key material and remains root-only. The unit drops all capabilities, uses `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, `PrivateDevices`, `PrivateTmp`, a system call filter, and a read-only `/data` mount. It writes only deduplication state under `/var/lib/stack-alerting`.
+
+### 9.2 Thresholds and timers
+
+| Check | Threshold or interval | Timer |
+| --- | --- | --- |
+| Filesystem use | Above 85 percent | `pmie`, every 2 minutes |
+| One-minute load | Above 4 | `pmie`, every 2 minutes |
+| Available memory | Below 512 MB | `pmie`, every 2 minutes |
+| Core services | Inactive | `pcp-service-check.timer`, every 2 minutes |
+| Traefik health | `/ping` failure | `pcp-service-check.timer`, every 2 minutes |
+| Authelia health | `/api/health` failure | `pcp-service-check.timer`, every 2 minutes |
+| Certificate expiry | Below 14 days | `pcp-cert-check.timer`, daily |
+| External heartbeat | No heartbeat for the provider interval | `pcp-heartbeat.timer`, every 5 minutes |
+
+`pmie` deduplicates a persistent condition with a 30-minute cooldown. Service checks alert on a transition to failure and send a recovery on the transition back to healthy.
+
+### 9.3 Secrets
+
+| Secret name | Runtime file | Owner and mode |
+| --- | --- | --- |
+| `alert-webhook-url` | `/data/monitoring/alerting/env` | `alerting:alerting`, `0600` |
+| `alert-heartbeat-url` | `/data/monitoring/alerting/env` | `alerting:alerting`, `0600` |
+
+The webhook URL must use HTTPS. The heartbeat URL must use HTTPS. The runtime file contains both values. Do not store either value in a tracked file.
+
+### 9.4 Exposure
+
+Alert delivery adds no inbound port and no Traefik route. The only network flow is outbound HTTPS to the webhook receiver and the heartbeat provider. The external provider alerts when the heartbeat stops.
+
+### 9.5 Verification
+
+```bash
+systemctl is-active pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+sudo runuser -u alerting -- pmie -C -c /etc/pcp/pmie/stack-alerts.pmie
+ls -l /data/monitoring/alerting/env
+systemctl list-timers pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+```
+
+A test alert requires a webhook receiver. `sudo systemctl start pcp-alert-notify@test.service` sends one alert. A stopped-instance test proves the external heartbeat.
+
 ## Related documents
 
 - Design: `docs/architecture.md`
 - Monitoring decision: `docs/decisions/010-monitoring-presentation.md`
+- Alert delivery decision: `docs/decisions/011-alert-delivery.md`
 - Deployment: `docs/guides/getting-started.md`
 - Operations: `docs/guides/operations.md`
 - Traefik reference: `docs/reference/traefik.md`

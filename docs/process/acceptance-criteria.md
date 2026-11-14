@@ -3,7 +3,7 @@ name: "Acceptance Criteria"
 description: |
   Acceptance checklist for proving a deployment, covering prerequisites, boot, services, security, recovery, and release criteria.
 status: active
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -19,7 +19,7 @@ Evidence source: command output, log excerpt, test screenshot, or a linked findi
 | --- | -------------------------------------------------------------------------------- | -------------------------------------- | ----------- |
 | P1  | OCI VCN and subnet allow TCP 80, TCP 443, and UDP 51820                          | Security list or NSG export            | Claimed     |
 | P2  | Dynamic group and IAM policy allow `read secret-family` in the Vault compartment | Policy export                          | Claimed     |
-| P3  | Three Vault secrets exist with the expected names                                | `oci secrets secret-bundle get` output | Claimed     |
+| P3  | Five mandatory Vault secrets exist with the expected names                      | `oci secrets secret-bundle get` output | Claimed     |
 | P4  | All required DNS records exist and admin records are DNS-only                    | Cloudflare zone export                 | Claimed     |
 | P5  | A block volume is attached and is empty or intentionally preserved               | OCI console, `lsblk`                   | Claimed     |
 | P6  | A disposable test environment exists for phases D and E                          | Environment record                     | Not started |
@@ -52,6 +52,8 @@ Evidence source: command output, log excerpt, test screenshot, or a linked findi
 | S10 | Cockpit WebSocket terminal works through Traefik      | Browser test                                   | Claimed |
 | S11 | The chosen metrics endpoint returns data              | `curl`                                         | Claimed |
 | S12 | PCP is active, pmproxy responds, and the selected monitoring profile is healthy | `systemctl`, `curl`, `pminfo` | Claimed |
+| S13 | A test alert reaches the configured HTTPS webhook                     | Webhook receipt, `systemctl start pcp-alert-notify@test.service` | Claimed |
+| S14 | The external heartbeat provider receives a ping and detects a stopped instance | Provider event log, stopped-instance test | Claimed |
 
 ## 4. Security controls
 
@@ -69,6 +71,8 @@ Evidence source: command output, log excerpt, test screenshot, or a linked findi
 | X10 | Vault fetch failure prevents boot rather than degrading silently       | Negative test                | Claimed |
 | X11 | Authelia runs as a rootless user unit                                  | User unit, `/etc/subuid`     | Claimed |
 | X12 | wg-easy uses a user namespace without SYS_MODULE                       | Podman inspect output        | Claimed |
+| X13 | The alerting environment file is mode 0600 and owned by `alerting`     | `stat`, `ls -l`              | Claimed |
+| X14 | Alert delivery adds no inbound port and uses HTTPS only                | `ss -ltnp`, firewall export, config review | Claimed |
 
 ## 5. Disposability and recovery
 

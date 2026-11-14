@@ -3,8 +3,8 @@ name: "OCI Secure Stack Delivery Plan"
 description: |
   Decision-first plan for resuming work, with phases, tasks, gates, estimates, and immediate next actions.
 status: active
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # OCI Secure Stack Delivery Plan
@@ -52,6 +52,7 @@ Goal: make goals and decisions explicit, tracked, and coherent.
 - [ ] A10 Write ADR-007 OCI provisioning method: manual or Terraform.
 - [x] A10a Write ADR-008 Traefik runtime. (draft)
 - [ ] A11 Migrate legacy documents into the project and process layers. Delete the legacy tree only after every section is verified.
+- [x] A12 Write ADR-011 alert delivery. (draft)
 
 Gate GA: every goal has a named maintainer, a testable criterion, and no unresolved contradiction. No implementation work starts before this gate.
 
@@ -127,7 +128,7 @@ Gate GF: a new operator can deploy from tracked documentation alone. This gate r
 - [ ] G2 Deploy and verify.
 - [ ] G3 Add the first peer, verify access, then close SSH.
 - [ ] G4 Enable backups and confirm a restore.
-- [ ] G5 Add certificate expiry and disk space checks.
+- [ ] G5 Verify certificate expiry, disk space, service failure, webhook, and heartbeat checks.
 - [ ] G6 Write runbooks: replacement, rotation, upgrade, rollback.
 - [ ] G7 Tag `v1.0.0` and add `CHANGELOG.md`.
 

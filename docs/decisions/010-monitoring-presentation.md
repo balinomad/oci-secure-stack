@@ -3,7 +3,7 @@ name: "ADR-010: Local Monitoring UI and Historical Retention"
 description: |
   Decision to provide a loopback-only Grafana UI over PCP metrics, with an optional Valkey history profile.
 status: draft
-version: 1.0
+version: 1.1
 updated: 2026-11-14
 ---
 
@@ -13,7 +13,7 @@ updated: 2026-11-14
 
 ADR-003 selects PCP as the metrics data plane and rejects a full Prometheus server. PCP provides `pmcd`, `pmlogger`, and a Prometheus-compatible `pmproxy` endpoint, but it provides no general-purpose dashboard. Without a dashboard, an operator must use command-line tools or build ad hoc queries.
 
-The stack needs one local view of host and container health without a paid service and without a full Prometheus server. The view must remain available when no external monitoring server exists. The design must also accept an external Prometheus server later without changing the data plane.
+The stack needs one local view of host and rootful container health without a paid service and without a full Prometheus server. The view must remain available when no external monitoring server exists. The design must also accept an external Prometheus server later without changing the data plane.
 
 PCP can store history in Valkey or Redis through `pmproxy`. That storage adds memory and disk requirements. The live dashboard must work on a 4 GB instance. Historical retention requires more capacity and is optional.
 
@@ -72,12 +72,13 @@ Adopt option 2 as the default live profile. Keep option 3 as an explicit histori
 1. The default monitoring profile is `live`. It installs Grafana OSS with `grafana-pcp` and uses the PCP Vector datasource against `pmproxy`.
 2. The optional `history` profile adds Valkey for PCP `pmseries` history. It is not enabled by default.
 3. The live profile minimum is 4 GB total RAM, 2 vCPU, and 2 GB free disk. The history profile minimum is 6 GB total RAM, 2 vCPU, and 5 GB free disk. These are architecture-neutral minimums, not a statement about the current OCI shape.
-4. The PCP data plane consists of `pmcd`, `pmlogger`, `pmproxy`, `pcp-pmda-podman`, `pcp-pmda-openmetrics`, and `pmie`. `pmproxy` is the only Prometheus-compatible endpoint and binds to `127.0.0.1:44322`.
+4. The PCP data plane consists of `pmcd`, `pmlogger`, `pmproxy`, `pcp-pmda-podman`, `pcp-pmda-openmetrics`, and `pmie`. `pmproxy` is the only Prometheus-compatible endpoint and binds to `127.0.0.1:44322`. Alert delivery is defined in ADR-011.
 5. Grafana binds to `127.0.0.1:3000`. Valkey binds to `127.0.0.1:6379`. No Traefik route exists for Grafana, Valkey, `pmproxy`, or raw metrics. Access is through an SSH tunnel.
 6. Grafana state is stored under `/data/monitoring/grafana`. Valkey state is stored under `/data/monitoring/valkey`.
 7. The Grafana admin password comes from OCI Vault as `grafana-admin-password` with the deployment binding `GRAFANA_SECRET_OCID`. The password is never written to a tracked file.
 8. An external Prometheus server is not deployed now. The design keeps the single `pmproxy` endpoint and stable PCP metric names so an external server can scrape it later without a data-plane change.
 9. The exact package, port, and capacity requirements are canonical in `docs/reference/infrastructure.md` section 8.
+10. Applications that expose a Prometheus or OpenMetrics endpoint must bind it to `127.0.0.1` and register it with the OpenMetrics PMDA. This endpoint is the primary telemetry for rootless applications.
 
 ## Consequences
 
@@ -86,12 +87,16 @@ Adopt option 2 as the default live profile. Keep option 3 as an explicit histori
 - Grafana and Valkey are not exposed through Traefik. Operators use SSH local forwarding.
 - Monitoring state survives VM replacement only when `/data/monitoring` is present on the block volume.
 - Valkey history is additional state. A backup or restore procedure must cover it or explicitly exclude it.
+- The Podman PMDA covers rootful containers only. Rootless Authelia and rootless application containers are not collected. Compensating controls are Authelia health checks, application OpenMetrics, journald, and on-demand `podman stats`.
+- Revisit the rootful-only scope when more than three rootless application containers run or when host memory use exceeds 70 percent.
 - A future external Prometheus server can scrape `127.0.0.1:44322` through a secure tunnel. It does not require a public metrics route.
+- Alert delivery is separate from the presentation layer. `pmie`, systemd failure hooks, an HTTPS webhook, and an external heartbeat are defined in ADR-011.
 - The decision remains unverified until a deployment records PCP export, Grafana health, and the selected profile.
 
 ## References
 
 - `docs/decisions/003-metrics-architecture.md`
+- `docs/decisions/011-alert-delivery.md`
 - `docs/decisions/001-exposure-model.md`
 - `docs/reference/infrastructure.md` section 8
 - `docs/guides/operations.md`
