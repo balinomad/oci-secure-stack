@@ -24,15 +24,15 @@ All state, including certificates, user accounts, WireGuard keys, and container 
 
 ## Documentation
 
-| Reader need            | Document                                                                                                                                                 |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Understand the design  | [docs/architecture.md](docs/architecture.md)                                                                                                             |
-| Read the decisions     | [docs/decisions/decision-index.md](docs/decisions/decision-index.md)                                                                                     |
-| Deploy the stack       | [docs/guides/getting-started.md](docs/guides/getting-started.md)                                                                                         |
-| Operate and recover it | [docs/guides/operations.md](docs/guides/operations.md)                                                                                                   |
-| Add an application     | [docs/guides/adding-apps.md](docs/guides/adding-apps.md)                                                                                                 |
-| Look up exact values   | [infrastructure](docs/reference/infrastructure.md), [Traefik](docs/reference/traefik.md), [application manifest](docs/reference/application-manifest.md) |
-| Track project status   | [docs/process/process-index.md](docs/process/process-index.md)                                                                                           |
+| Reader need            | Document                                                                                                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Understand the design  | [docs/architecture.md](docs/architecture.md)                                                                                                                                                     |
+| Read the decisions     | [docs/decisions/decision-index.md](docs/decisions/decision-index.md)                                                                                                                             |
+| Deploy the stack       | [docs/guides/getting-started.md](docs/guides/getting-started.md)                                                                                                                                 |
+| Operate and recover it | [docs/guides/operations.md](docs/guides/operations.md)                                                                                                                                           |
+| Add an application     | [docs/guides/adding-apps.md](docs/guides/adding-apps.md)                                                                                                                                         |
+| Look up exact values   | [infrastructure](docs/reference/infrastructure.md), [Authelia](docs/reference/authelia.md), [Traefik](docs/reference/traefik.md), [application manifest](docs/reference/application-manifest.md) |
+| Track project status   | [docs/process/process-index.md](docs/process/process-index.md)                                                                                                                                   |
 
 ## Quick start
 

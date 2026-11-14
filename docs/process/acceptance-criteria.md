@@ -3,7 +3,7 @@ name: "Acceptance Criteria"
 description: |
   Acceptance checklist for proving a deployment, covering prerequisites, boot, services, security, recovery, and release criteria.
 status: active
-version: 1.4
+version: 1.5
 updated: 2026-11-14
 ---
 
@@ -80,7 +80,7 @@ Evidence source: command output, log excerpt, test screenshot, or a linked findi
 | --- | ---------------------------------------------------------------------- | ------------------------ | ------- |
 | R1  | A replacement instance attaches the existing block volume              | Replacement drill        | Claimed |
 | R2  | Certificates survive replacement                                       | `acme.json`, TLS test    | Claimed |
-| R3  | Authelia users and sessions survive replacement                        | Login test               | Claimed |
+| R3  | Authelia users and two-factor enrollment survive replacement           | Login test               | Claimed |
 | R4  | WireGuard peers survive replacement                                    | Peer test                | Claimed |
 | R5  | Application data survives replacement                                  | App test                 | Claimed |
 | R6  | Restic backup completes and a restore succeeds, if in scope            | Backup log, restore test | Claimed |

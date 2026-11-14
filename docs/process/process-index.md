@@ -3,7 +3,7 @@ name: "Process Record"
 description: |
   Index and maintenance rules for the project process record, including the status legend and evidence rules.
 status: active
-version: 1.4
+version: 1.5
 updated: 2026-11-14
 ---
 
@@ -19,6 +19,7 @@ Project-defining material lives outside this directory:
 - Operations runbook: `docs/guides/operations.md`
 - Application integration: `docs/guides/adding-apps.md`
 - Infrastructure reference: `docs/reference/infrastructure.md`
+- Authelia reference: `docs/reference/authelia.md`
 - Traefik reference: `docs/reference/traefik.md`
 - Application manifest reference: `docs/reference/application-manifest.md`
 

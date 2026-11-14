@@ -3,7 +3,7 @@ name: "Infrastructure Reference"
 description: |
   Exact template variables, OCI network rules, DNS records, Vault secrets, persistent storage layout, and reserved ports for the stack.
 status: draft
-version: 1.3
+version: 1.4
 updated: 2026-11-14
 ---
 
@@ -15,18 +15,18 @@ This page documents the OCI infrastructure and host baseline for the stack. See 
 
 `infra/cloud-init/cloud-config.example.yaml` uses `${VARIABLE}` syntax for site-specific values. All other `${...}` references inside `runcmd` blocks are shell variables and must remain unsubstituted.
 
-| Variable              | Description                                             | Example                       |
-| --------------------- | ------------------------------------------------------- | ----------------------------- |
-| `${DOMAIN}`           | Base domain for all subdomains                          | `example.com`                 |
-| `${ACME_EMAIL}`       | Email for Let's Encrypt expiry notices                  | `ops@example.com`             |
-| `${ADMIN_EMAIL}`      | Authelia admin user email                               | `admin@example.com`           |
-| `${CF_SECRET_OCID}`   | OCID of the Cloudflare token secret in OCI Vault        | `ocid1.vaultsecret.oc1..xxxx` |
-| `${AUTH_SECRET_OCID}` | OCID of the Authelia admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..yyyy` |
-| `${WG_SECRET_OCID}`   | OCID of the wg-easy admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..zzzz` |
-| `${GRAFANA_SECRET_OCID}` | OCID of the Grafana admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..gggg` |
-| `${ALERT_WEBHOOK_SECRET_OCID}` | OCID of the alert webhook secret in OCI Vault | `ocid1.vaultsecret.oc1..aaaa` |
-| `${ALERT_HEARTBEAT_SECRET_OCID}` | OCID of the alert heartbeat secret in OCI Vault | `ocid1.vaultsecret.oc1..bbbb` |
-| `${MONITORING_PROFILE}` | Monitoring profile: `live`, `history`, or `none`        | `live`                        |
+| Variable                         | Description                                             | Example                       |
+| -------------------------------- | ------------------------------------------------------- | ----------------------------- |
+| `${DOMAIN}`                      | Base domain for all subdomains                          | `example.com`                 |
+| `${ACME_EMAIL}`                  | Email for Let's Encrypt expiry notices                  | `ops@example.com`             |
+| `${ADMIN_EMAIL}`                 | Authelia admin user email                               | `admin@example.com`           |
+| `${CF_SECRET_OCID}`              | OCID of the Cloudflare token secret in OCI Vault        | `ocid1.vaultsecret.oc1..xxxx` |
+| `${AUTH_SECRET_OCID}`            | OCID of the Authelia admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..yyyy` |
+| `${WG_SECRET_OCID}`              | OCID of the wg-easy admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..zzzz` |
+| `${GRAFANA_SECRET_OCID}`         | OCID of the Grafana admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..gggg` |
+| `${ALERT_WEBHOOK_SECRET_OCID}`   | OCID of the alert webhook secret in OCI Vault           | `ocid1.vaultsecret.oc1..aaaa` |
+| `${ALERT_HEARTBEAT_SECRET_OCID}` | OCID of the alert heartbeat secret in OCI Vault         | `ocid1.vaultsecret.oc1..bbbb` |
+| `${MONITORING_PROFILE}`          | Monitoring profile: `live`, `history`, or `none`        | `live`                        |
 
 `${GRAFANA_SECRET_OCID}` is required when `${MONITORING_PROFILE}` is `live` or `history`. The two alert secret OCIDs are required in every profile.
 
@@ -65,13 +65,13 @@ Admin subdomains must be DNS Only. Cloudflare proxying makes Cloudflare IPs appe
 
 ## 4. OCI Vault secrets
 
-| Secret name                | Purpose                         | Variable                |
-| -------------------------- | ------------------------------- | ----------------------- |
-| `traefik-cloudflare-token` | ACME DNS-01 challenge           | `${CF_SECRET_OCID}`     |
-| `authelia-admin-password`  | Initial Authelia admin password | `${AUTH_SECRET_OCID}`   |
-| `wg-easy-admin-password`   | Initial wg-easy admin password  | `${WG_SECRET_OCID}`     |
-| `grafana-admin-password`   | Grafana admin password          | `${GRAFANA_SECRET_OCID}` |
-| `alert-webhook-url`        | HTTPS alert delivery webhook    | `${ALERT_WEBHOOK_SECRET_OCID}` |
+| Secret name                | Purpose                         | Variable                         |
+| -------------------------- | ------------------------------- | -------------------------------- |
+| `traefik-cloudflare-token` | ACME DNS-01 challenge           | `${CF_SECRET_OCID}`              |
+| `authelia-admin-password`  | Initial Authelia admin password | `${AUTH_SECRET_OCID}`            |
+| `wg-easy-admin-password`   | Initial wg-easy admin password  | `${WG_SECRET_OCID}`              |
+| `grafana-admin-password`   | Grafana admin password          | `${GRAFANA_SECRET_OCID}`         |
+| `alert-webhook-url`        | HTTPS alert delivery webhook    | `${ALERT_WEBHOOK_SECRET_OCID}`   |
 | `alert-heartbeat-url`      | External heartbeat endpoint     | `${ALERT_HEARTBEAT_SECRET_OCID}` |
 
 IAM policy:
@@ -92,7 +92,7 @@ Cloud-init detects the block device in this order: `/dev/oracleoci/oraclevdb`, `
 │   └── letsencrypt/         # acme.json
 ├── authelia/
 │   ├── config/              # configuration and users database
-│   ├── db/                  # SQLite database
+│   ├── db/                  # authelia.sqlite3
 │   └── env                  # secrets, PUID/PGID, and UMASK, mode 0600
 ├── apps/                    # application deployment manifests
 ├── containers/
@@ -159,20 +159,20 @@ Alert delivery adds no reserved inbound port. The notifier and heartbeat use out
 
 The template installs these package groups.
 
-| Package                 | Group      | Purpose                                      |
-| ----------------------- | ---------- | -------------------------------------------- |
-| `cockpit`               | Base       | Web console                                  |
-| `cockpit-storaged`      | Base       | Storage management page                      |
-| `cockpit-podman`        | Base       | Podman container management page             |
-| `cockpit-pcp`           | Monitoring | Cockpit PCP metrics page                     |
-| `jq`                    | Base       | JSON payload and ACME state parsing          |
-| `pcp`                   | Monitoring | Performance Co-Pilot collector               |
-| `pcp-zeroconf`          | Monitoring | `pmlogger` and default archive setup         |
-| `pcp-pmda-podman`       | Monitoring | Rootful container metrics                    |
-| `pcp-pmda-openmetrics`  | Monitoring | Traefik and application OpenMetrics ingestion |
-| `grafana`               | Live       | Grafana OSS server                           |
-| `grafana-pcp`           | Live       | PCP Vector and Valkey datasources            |
-| `valkey`                | History    | PCP `pmseries` history store                 |
+| Package                | Group      | Purpose                                       |
+| ---------------------- | ---------- | --------------------------------------------- |
+| `cockpit`              | Base       | Web console                                   |
+| `cockpit-storaged`     | Base       | Storage management page                       |
+| `cockpit-podman`       | Base       | Podman container management page              |
+| `cockpit-pcp`          | Monitoring | Cockpit PCP metrics page                      |
+| `jq`                   | Base       | JSON payload and ACME state parsing           |
+| `pcp`                  | Monitoring | Performance Co-Pilot collector                |
+| `pcp-zeroconf`         | Monitoring | `pmlogger` and default archive setup          |
+| `pcp-pmda-podman`      | Monitoring | Rootful container metrics                     |
+| `pcp-pmda-openmetrics` | Monitoring | Traefik and application OpenMetrics ingestion |
+| `grafana`              | Live       | Grafana OSS server                            |
+| `grafana-pcp`          | Live       | PCP Vector and Valkey datasources             |
+| `valkey`               | History    | PCP `pmseries` history store                  |
 
 `pmproxy`, `pmie`, and the two PMDAs are part of the PCP data plane and are not optional in the `live` or `none` profile.
 
@@ -205,14 +205,14 @@ The live profile fits a 2 OCPU and 4 GB instance. The history profile requires a
 
 ### 8.3 PCP data plane
 
-| Component             | Role                                                        |
-| --------------------- | ----------------------------------------------------------- |
-| `pmcd`                | PCP collector daemon                                        |
-| `pmlogger`            | Archive logger                                              |
-| `pmproxy`             | Prometheus-compatible endpoint and `pmseries` query service |
-| `pcp-pmda-podman`     | Rootful Podman container metrics                            |
-| `pcp-pmda-openmetrics` | Traefik and application `/metrics` ingestion               |
-| `pmie`                | Local inference and alert evaluation                        |
+| Component              | Role                                                        |
+| ---------------------- | ----------------------------------------------------------- |
+| `pmcd`                 | PCP collector daemon                                        |
+| `pmlogger`             | Archive logger                                              |
+| `pmproxy`              | Prometheus-compatible endpoint and `pmseries` query service |
+| `pcp-pmda-podman`      | Rootful Podman container metrics                            |
+| `pcp-pmda-openmetrics` | Traefik and application `/metrics` ingestion                |
+| `pmie`                 | Local inference and alert evaluation                        |
 
 `pmproxy` binds to `127.0.0.1:44322`. It is the only Prometheus-compatible endpoint. An external Prometheus server can scrape it later through a secure tunnel. No external server is deployed now.
 
@@ -224,15 +224,15 @@ The OpenMetrics PMDA reads `http://127.0.0.1:8082/metrics` through `/etc/pcp/ope
 
 The live profile installs `grafana` and `grafana-pcp`. It provides one local Grafana instance with the bundled PCP Vector dashboards.
 
-| Item            | Value                                      |
-| --------------- | ------------------------------------------ |
-| Listener        | `127.0.0.1:3000`                           |
-| Configuration   | `/etc/grafana/grafana.ini`                 |
-| Provisioning    | `/etc/grafana/provisioning/`               |
-| Dashboard files | `/etc/grafana/dashboards/`                 |
-| State           | `/data/monitoring/grafana`                 |
-| Password        | OCI Vault secret `grafana-admin-password`  |
-| Systemd unit    | `grafana-server.service`                   |
+| Item             | Value                                           |
+| ---------------- | ----------------------------------------------- |
+| Listener         | `127.0.0.1:3000`                                |
+| Configuration    | `/etc/grafana/grafana.ini`                      |
+| Provisioning     | `/etc/grafana/provisioning/`                    |
+| Dashboard files  | `/etc/grafana/dashboards/`                      |
+| State            | `/data/monitoring/grafana`                      |
+| Password         | OCI Vault secret `grafana-admin-password`       |
+| Systemd unit     | `grafana-server.service`                        |
 | Systemd drop-ins | `/etc/systemd/system/grafana-server.service.d/` |
 
 Grafana loads the PCP plugin from the `grafana-pcp` RPM. The RPM does not include plugin signatures, so `/etc/grafana/grafana.ini` allows the PCP plugin IDs explicitly. Do not add other unsigned plugins to that list.
@@ -243,14 +243,14 @@ Systemd drop-ins under `/etc/systemd/system/grafana-server.service.d/` load `/da
 
 The history profile adds `valkey` and PCP `pmseries` history. It includes everything in the live profile.
 
-| Item          | Value                                      |
-| ------------- | ------------------------------------------ |
-| Listener      | `127.0.0.1:6379`                           |
-| Configuration | `/etc/valkey/valkey.conf`                  |
-| State         | `/data/monitoring/valkey`                  |
-| Systemd unit  | `valkey.service`                           |
+| Item            | Value                                            |
+| --------------- | ------------------------------------------------ |
+| Listener        | `127.0.0.1:6379`                                 |
+| Configuration   | `/etc/valkey/valkey.conf`                        |
+| State           | `/data/monitoring/valkey`                        |
+| Systemd unit    | `valkey.service`                                 |
 | Systemd drop-in | `/etc/systemd/system/valkey.service.d/data.conf` |
-| Memory cap    | 512 MB with `noeviction`                   |
+| Memory cap      | 512 MB with `noeviction`                         |
 
 Oracle Linux 9 AppStream provides `grafana-pcp` 5.1.1. That version exposes the PCP Redis datasource, which is compatible with Valkey. The provisioned datasource is named PCP Valkey and uses the PCP Redis plugin type.
 
@@ -312,13 +312,13 @@ This section is the canonical statement of alert delivery requirements. ADR-011 
 
 ### 9.1 Components
 
-| Component | Role | Identity |
-| --- | --- | --- |
-| `pcp-alert-pmie.service` | Evaluates the `pmie` threshold rules | `alerting` |
-| `pcp-alert-notify@.service` | Sends a unit failure alert | `alerting` |
-| `pcp-service-check.service` | Checks core units, Traefik health, and Authelia health | `alerting` |
-| `pcp-cert-check.service` | Checks the earliest certificate expiry | `root`, hardened |
-| `pcp-heartbeat.service` | Sends the external heartbeat | `alerting` |
+| Component                   | Role                                                   | Identity         |
+| --------------------------- | ------------------------------------------------------ | ---------------- |
+| `pcp-alert-pmie.service`    | Evaluates the `pmie` threshold rules                   | `alerting`       |
+| `pcp-alert-notify@.service` | Sends a unit failure alert                             | `alerting`       |
+| `pcp-service-check.service` | Checks core units, Traefik health, and Authelia health | `alerting`       |
+| `pcp-cert-check.service`    | Checks the earliest certificate expiry                 | `root`, hardened |
+| `pcp-heartbeat.service`     | Sends the external heartbeat                           | `alerting`       |
 
 The `pmie` rules are in `/etc/pcp/pmie/stack-alerts.pmie`. The service list is `/etc/pcp/alerting/services.list`. The notifier is `/usr/local/libexec/stack-alerting`.
 
@@ -326,24 +326,24 @@ The `pmie` rules are in `/etc/pcp/pmie/stack-alerts.pmie`. The service list is `
 
 ### 9.2 Thresholds and timers
 
-| Check | Threshold or interval | Timer |
-| --- | --- | --- |
-| Filesystem use | Above 85 percent | `pmie`, every 2 minutes |
-| One-minute load | Above 4 | `pmie`, every 2 minutes |
-| Available memory | Below 512 MB | `pmie`, every 2 minutes |
-| Core services | Inactive | `pcp-service-check.timer`, every 2 minutes |
-| Traefik health | `/ping` failure | `pcp-service-check.timer`, every 2 minutes |
-| Authelia health | `/api/health` failure | `pcp-service-check.timer`, every 2 minutes |
-| Certificate expiry | Below 14 days | `pcp-cert-check.timer`, daily |
-| External heartbeat | No heartbeat for the provider interval | `pcp-heartbeat.timer`, every 5 minutes |
+| Check              | Threshold or interval                  | Timer                                      |
+| ------------------ | -------------------------------------- | ------------------------------------------ |
+| Filesystem use     | Above 85 percent                       | `pmie`, every 2 minutes                    |
+| One-minute load    | Above 4                                | `pmie`, every 2 minutes                    |
+| Available memory   | Below 512 MB                           | `pmie`, every 2 minutes                    |
+| Core services      | Inactive                               | `pcp-service-check.timer`, every 2 minutes |
+| Traefik health     | `/ping` failure                        | `pcp-service-check.timer`, every 2 minutes |
+| Authelia health    | `/api/health` failure                  | `pcp-service-check.timer`, every 2 minutes |
+| Certificate expiry | Below 14 days                          | `pcp-cert-check.timer`, daily              |
+| External heartbeat | No heartbeat for the provider interval | `pcp-heartbeat.timer`, every 5 minutes     |
 
 `pmie` deduplicates a persistent condition with a 30-minute cooldown. Service checks alert on a transition to failure and send a recovery on the transition back to healthy.
 
 ### 9.3 Secrets
 
-| Secret name | Runtime file | Owner and mode |
-| --- | --- | --- |
-| `alert-webhook-url` | `/data/monitoring/alerting/env` | `alerting:alerting`, `0600` |
+| Secret name           | Runtime file                    | Owner and mode              |
+| --------------------- | ------------------------------- | --------------------------- |
+| `alert-webhook-url`   | `/data/monitoring/alerting/env` | `alerting:alerting`, `0600` |
 | `alert-heartbeat-url` | `/data/monitoring/alerting/env` | `alerting:alerting`, `0600` |
 
 The webhook URL must use HTTPS. The heartbeat URL must use HTTPS. The runtime file contains both values. Do not store either value in a tracked file.

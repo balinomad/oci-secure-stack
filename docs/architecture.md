@@ -3,7 +3,7 @@ name: "Architecture"
 description: |
   Project purpose, goals, principles, constraints, system architecture, security model, risks, and decision index for the OCI secure stack.
 status: draft
-version: 1.3
+version: 1.4
 updated: 2026-11-14
 ---
 
@@ -36,16 +36,16 @@ A clean OCI instance must provision from the tracked cloud-init configuration an
 
 ## Success criteria
 
-| ID  | Criterion                                                                                                                     |
-| --- | ----------------------------------------------------------------------------------------------------------------------------- |
-| S1  | A clean instance reaches `cloud-init status: done` with no unhandled errors                                                   |
-| S2  | The block volume is mounted at `/data`, recorded by UUID, and survives reboot                                                 |
-| S3  | Traefik serves valid TLS certificates for every configured hostname                                                           |
-| S4  | Administrative URLs return 403 without the VPN and require password plus TOTP over the VPN                                    |
-| S5  | No administrative service is reachable directly, bypassing Traefik and Authelia                                               |
-| S6  | The verification procedure passes with recorded evidence                                                                      |
-| S7  | A replacement instance attached to the same block volume preserves certificates, users, sessions, peers, and application data |
-| S8  | A new operator can deploy and verify the stack from tracked documentation alone                                               |
+| ID  | Criterion                                                                                                                            |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| S1  | A clean instance reaches `cloud-init status: done` with no unhandled errors                                                          |
+| S2  | The block volume is mounted at `/data`, recorded by UUID, and survives reboot                                                        |
+| S3  | Traefik serves valid TLS certificates for every configured hostname                                                                  |
+| S4  | Administrative URLs return 403 without the VPN and require password plus TOTP over the VPN                                           |
+| S5  | No administrative service is reachable directly, bypassing Traefik and Authelia                                                      |
+| S6  | The verification procedure passes with recorded evidence                                                                             |
+| S7  | A replacement instance attached to the same block volume preserves certificates, users, session secrets, peers, and application data |
+| S8  | A new operator can deploy and verify the stack from tracked documentation alone                                                      |
 
 ## Non-goals
 
@@ -159,20 +159,20 @@ WireGuard and Traefik are parallel services. WireGuard provides the encrypted tu
 
 ### Component roles
 
-| Component         | Role                                                | Exposed port     | Authentication    |
-| ----------------- | --------------------------------------------------- | ---------------- | ----------------- |
-| Traefik           | Edge router, TLS termination, routing               | 80, 443 public   | None              |
-| WireGuard         | VPN tunnel for admin access                         | 51820/UDP public | Peer public key   |
-| Authelia          | SSO and MFA gateway for admin routes                | Loopback 9091    | None              |
-| Traefik dashboard | Router, middleware, service inspection              | Loopback 8080    | SSH tunnel        |
-| Traefik metrics   | Prometheus metrics endpoint                         | Loopback 8082    | SSH tunnel        |
-| PCP               | Host, rootful container, and OpenMetrics collection | Loopback 44322   | SSH tunnel        |
-| Grafana           | Local monitoring UI                                 | Loopback 3000    | SSH tunnel        |
-| Valkey            | PCP history store, history profile                  | Loopback 6379    | SSH tunnel        |
+| Component         | Role                                                | Exposed port     | Authentication                |
+| ----------------- | --------------------------------------------------- | ---------------- | ----------------------------- |
+| Traefik           | Edge router, TLS termination, routing               | 80, 443 public   | None                          |
+| WireGuard         | VPN tunnel for admin access                         | 51820/UDP public | Peer public key               |
+| Authelia          | SSO and MFA gateway for admin routes                | Loopback 9091    | None                          |
+| Traefik dashboard | Router, middleware, service inspection              | Loopback 8080    | SSH tunnel                    |
+| Traefik metrics   | Prometheus metrics endpoint                         | Loopback 8082    | SSH tunnel                    |
+| PCP               | Host, rootful container, and OpenMetrics collection | Loopback 44322   | SSH tunnel                    |
+| Grafana           | Local monitoring UI                                 | Loopback 3000    | SSH tunnel                    |
+| Valkey            | PCP history store, history profile                  | Loopback 6379    | SSH tunnel                    |
 | Alert delivery    | pmie thresholds, service checks, webhook, heartbeat | Outbound HTTPS   | Webhook and heartbeat secrets |
-| Cockpit           | Full OS web console                                 | Through Traefik  | Authelia plus PAM |
-| wg-easy           | WireGuard peer management UI                        | Through Traefik  | Authelia          |
-| Podman containers | Application workloads                               | Per application  | Per application   |
+| Cockpit           | Full OS web console                                 | Through Traefik  | Authelia plus PAM             |
+| wg-easy           | WireGuard peer management UI                        | Through Traefik  | Authelia                      |
+| Podman containers | Application workloads                               | Per application  | Per application               |
 
 Authelia runs as a rootless Quadlet user unit. wg-easy runs as a rootful Quadlet system unit inside a user namespace with only `NET_ADMIN` and `NET_RAW`. Traefik runs as a native systemd service. See ADR-002, ADR-008, and ADR-009.
 
