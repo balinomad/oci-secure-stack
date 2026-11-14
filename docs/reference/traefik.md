@@ -3,7 +3,7 @@ name: "Traefik Reference"
 description: |
   Exact Traefik static and dynamic configuration, systemd unit, binary update, backup, logging, audit, and SELinux settings for the host.
 status: draft
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -292,6 +292,14 @@ CF_DNS_API_TOKEN=replace-with-token-from-oci-vault
 ```
 
 The file must be owned by `traefik:traefik` and mode `0600`. The token must not appear in `traefik.yaml`.
+
+### 4.1 Tracked deployment script
+
+`infra/host/03-traefik.sh` is the supported install and repair path. It reads `infra/configs/traefik/release.env` and verifies the release archive SHA256 before installing `/usr/local/bin/traefik`. It creates `/data/traefik/letsencrypt` and `/data/logs/traefik`, creates `/etc/traefik/letsencrypt` and `/var/log/traefik` as symlinks to persistent storage, writes `/etc/traefik/env`, installs the unit and logrotate file, opens TCP 80 and 443, and checks `/ping`, `/metrics`, and the HTTP redirect.
+
+Existing Traefik configuration files under `/etc/traefik` are preserved. The script renders a missing file from `infra/configs/traefik/` and requires `DOMAIN` and `ACME_EMAIL` for that case.
+
+The manual binary update script in section 5 is superseded. It is retained as an example only.
 
 ## 5. Traefik binary update script
 

@@ -3,7 +3,7 @@ name: "OCI Secure Stack Delivery Plan"
 description: |
   Decision-first plan for resuming work, with phases, tasks, gates, estimates, and immediate next actions.
 status: active
-version: 1.3
+version: 1.5
 updated: 2026-11-14
 ---
 
@@ -103,7 +103,7 @@ Gate GD: `infra/host/verify-stack.sh` exits 0 and every item in `docs/process/ac
 ## Phase E: Structural refactor (3-5 days)
 
 - [x] E1 Extract configuration into `infra/configs/`. Evidence: `infra/manifest.yaml`, `tools/render-config.sh`.
-- [ ] E2 Populate `infra/host/00-06` as idempotent modules.
+- [ ] E2 Populate `infra/host/00-02.sh` and `infra/host/06-wireguard.sh` as idempotent modules.
 - [ ] E3 Implement Makefile targets: `lint`, `render`, `deploy`, `verify`, `backup`.
 - [x] E4 Convert infrastructure containers to Quadlet per ADR-009.
 - [ ] E5 Clean-room deploy from the refactored tree.

@@ -535,15 +535,29 @@ runcmd:
   # Traefik Binary (architecture-aware)
   # -----------------------------------------------------------
   - |
+    set -e
+    . /etc/traefik/release.env
     ARCH=$(uname -m)
     case "$ARCH" in
-      x86_64)  TRAEFIK_ARCH="amd64" ;;
-      aarch64) TRAEFIK_ARCH="arm64" ;;
-      *)       echo "Unsupported architecture: $ARCH"; exit 1 ;;
+      x86_64)
+        TRAEFIK_ARCH="amd64"
+        TRAEFIK_SHA256="${TRAEFIK_SHA256_AMD64}"
+        ;;
+      aarch64)
+        TRAEFIK_ARCH="arm64"
+        TRAEFIK_SHA256="${TRAEFIK_SHA256_ARM64}"
+        ;;
+      *)
+        echo "Unsupported architecture: $ARCH"
+        exit 1
+        ;;
     esac
-    TRAEFIK_VERSION="v3.7.1"
+    TMP_TRAEFIK=$(mktemp)
     curl -fsSL "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${TRAEFIK_ARCH}.tar.gz" \
-      | tar -xz -C /usr/local/bin/ traefik
+      -o "$TMP_TRAEFIK"
+    printf '%s  %s\n' "$TRAEFIK_SHA256" "$TMP_TRAEFIK" | sha256sum -c -
+    tar -xzf "$TMP_TRAEFIK" -C /usr/local/bin/ traefik
+    rm -f "$TMP_TRAEFIK"
     chown root:root /usr/local/bin/traefik
     chmod 755 /usr/local/bin/traefik
 

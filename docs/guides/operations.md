@@ -3,7 +3,7 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.5
+version: 1.6
 updated: 2026-11-14
 ---
 
@@ -172,6 +172,22 @@ curl -I http://auth.example.com
 ```
 
 Expected: `301` redirect to HTTPS.
+
+#### 4.1.1 Install or update Traefik
+
+Run the deployment script as root from a repository checkout:
+
+```bash
+sudo ./infra/host/03-traefik.sh
+```
+
+The script is idempotent. It creates or repairs the `traefik` user, `/data/traefik/letsencrypt`, `/data/logs/traefik`, the two persistent-storage symlinks, the environment file, missing configuration, release metadata, systemd unit, and logrotate file. It verifies the release SHA256 before installing the binary, opens TCP 80 and 443, and waits for the loopback health endpoints.
+
+Existing Traefik configuration files under `/etc/traefik` are preserved. To replace one, delete it or render it from `infra/configs/traefik` and rerun the script.
+
+Set `DOMAIN` and `ACME_EMAIL` when a configuration file is absent. Set `CF_DNS_API_TOKEN` or `CF_SECRET_OCID` when `/etc/traefik/env` is absent or contains the placeholder.
+
+The script stops when `/data` is not mounted, firewalld is missing or not running, a configuration file still contains a placeholder, or a legacy real directory at `/etc/traefik/letsencrypt` or `/var/log/traefik` contains data.
 
 ### 4.2 Authelia
 
@@ -907,7 +923,7 @@ systemctl status traefik
 getenforce
 sudo firewall-cmd --list-all
 sudo ss -ltnp | grep -E ':80|:443|:3000|:6379|:8080|:8082|:44322'
-ls -l /opt/traefik/bin/traefik
+ls -l /usr/local/bin/traefik
 ls -ld /data/traefik /data/logs/traefik /etc/traefik
 ls -l /data/traefik/letsencrypt/acme.json
 ls -l /etc/traefik/env
