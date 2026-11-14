@@ -3,8 +3,8 @@ name: "Decision Records"
 description: |
   Index of architecture decision records for the OCI secure stack.
 status: active
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # Decision Records
@@ -22,8 +22,9 @@ Each record states the context, the affected paths, the current text or behavior
 | ADR-007 | OCI provisioning method              | Draft  | [007-oci-provisioning-method.md](007-oci-provisioning-method.md)                   |
 | ADR-008 | Traefik runtime                      | Draft  | [008-traefik-runtime.md](008-traefik-runtime.md)                                   |
 | ADR-009 | Infrastructure container runtime     | Draft  | [009-infrastructure-container-runtime.md](009-infrastructure-container-runtime.md) |
+| ADR-010 | Local monitoring UI and history      | Draft  | [010-monitoring-presentation.md](010-monitoring-presentation.md)                   |
 
-ADR-006 and ADR-007 are draft. ADR-009 is decided in content and remains draft until committed and confirmed.
+ADR-006 and ADR-007 are draft. ADR-009 and ADR-010 are decided in content and remain draft until committed and confirmed.
 
 ## Open decision questions
 
