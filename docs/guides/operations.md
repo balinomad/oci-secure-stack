@@ -3,8 +3,8 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # Operations
@@ -28,14 +28,17 @@ yamllint infra/cloud-init/cloud-config.example.yaml
 
 ### 1.2 Render and validate the output
 
+The renderer requires `yq` v4.
+
 ```bash
 export $(cat .env | xargs)
-envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
-  < infra/cloud-init/cloud-config.example.yaml > cloud-config.yaml
+scripts/repo/render-config.sh \
+  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
+  > cloud-config.yaml
 
 yamllint cloud-config.yaml
 
-# Should return nothing if all variables were substituted
+# Inspect any remaining placeholders. Shell variables inside runcmd are intentional.
 grep '\${' cloud-config.yaml
 ```
 
@@ -93,24 +96,25 @@ sudo cloud-init modules --mode=config
 
 5. Copy each `runcmd` block from `cloud-config.yaml` and run it as root. Stop at the first error and resolve it before continuing.
 
-| Step | Block                             | Verify after                                                                                                           |
-| ---- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 1    | Boot volume expansion             | `df -h /` shows the expanded root filesystem                                                                           |
-| 2    | Block storage setup               | `mountpoint /data` exits 0; `cat /etc/fstab` shows a UUID entry                                                        |
-| 3    | Persistent directory structure    | `ls /data/` shows the expected subdirectories                                                                          |
-| 4    | Symlinks                          | `readlink -f /etc/traefik/letsencrypt` returns `/data/traefik/letsencrypt`                                             |
-| 5    | Traefik directories and ownership | `ls -la /etc/traefik/` shows `traefik:traefik` ownership                                                               |
-| 6    | Container tools                   | `podman --version`; `podman images` shows Authelia and wg-easy pulled                                                  |
-| 7    | Vault secrets                     | `/etc/traefik/env` contains `CF_DNS_API_TOKEN`; `/run/authelia-bootstrap.tmp` exists                                   |
-| 8    | Authelia bootstrap                | `/data/authelia/env`, `/data/authelia/config/configuration.yml`, and `/data/authelia/config/users_database.yaml` exist |
-| 9    | wg-easy environment               | `/data/containers/wg-easy/env` exists; `/run/wg-bootstrap.tmp` does not exist                                          |
-| 10   | SELinux contexts                  | `ausearch -m avc -ts recent \| grep traefik` returns nothing                                                           |
-| 11   | System hardening                  | `getenforce` returns `Enforcing`; `systemctl is-active auditd` returns `active`                                        |
-| 12   | Traefik binary                    | `/usr/local/bin/traefik version` prints a version                                                                      |
-| 13   | IP forwarding                     | `sysctl net.ipv4.ip_forward` returns `1`                                                                               |
-| 14   | Journal persistence               | `/var/log/journal/` exists                                                                                             |
-| 15   | Firewall rules                    | `firewall-cmd --list-all` shows HTTP, HTTPS, and 51820/UDP                                                             |
-| 16   | Service start                     | `systemctl is-active traefik authelia wg-easy cockpit pmcd pmlogger`                                                   |
+| Step | Block                             | Verify after                                                                                                                                                                                 |
+| ---- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Boot volume expansion             | `df -h /` shows the expanded root filesystem                                                                                                                                                 |
+| 2    | Block storage setup               | `mountpoint /data` exits 0; `cat /etc/fstab` shows a UUID entry                                                                                                                              |
+| 3    | Persistent directory structure    | `ls /data/` shows the expected subdirectories                                                                                                                                                |
+| 4    | Symlinks                          | `readlink -f /etc/traefik/letsencrypt` returns `/data/traefik/letsencrypt`                                                                                                                   |
+| 5    | Traefik directories and ownership | `ls -la /etc/traefik/` shows `traefik:traefik` ownership                                                                                                                                     |
+| 6    | Container tools                   | `podman --version`; `podman images` shows wg-easy; the `authelia` user store shows Authelia                                                                                                  |
+| 7    | Vault secrets                     | `/etc/traefik/env` contains `CF_DNS_API_TOKEN`; `/run/authelia-bootstrap.tmp` exists                                                                                                         |
+| 8    | Authelia bootstrap                | `/data/authelia/env`, `configuration.yml`, and `users_database.yaml` exist; `/data/authelia` is owned by `authelia`                                                                          |
+| 9    | wg-easy environment               | `/data/containers/wg-easy/env` exists and is owned by host UID `300000`; `/run/wg-bootstrap.tmp` does not exist                                                                              |
+| 10   | SELinux contexts                  | `ausearch -m avc -ts recent \| grep -E 'traefik\|authelia'` returns nothing                                                                                                                  |
+| 10a  | Quadlet units                     | Authelia and wg-easy units exist, are enabled, and are active; `runuser -u authelia -- env XDG_RUNTIME_DIR=/run/user/$(id -u authelia) systemctl --user is-active authelia` returns `active` |
+| 11   | System hardening                  | `getenforce` returns `Enforcing`; `systemctl is-active auditd` returns `active`                                                                                                              |
+| 12   | Traefik binary                    | `/usr/local/bin/traefik version` prints a version                                                                                                                                            |
+| 13   | IP forwarding                     | `sysctl net.ipv4.ip_forward` returns `1`                                                                                                                                                     |
+| 14   | Journal persistence               | `/var/log/journal/` exists                                                                                                                                                                   |
+| 15   | Firewall rules                    | `firewall-cmd --list-all` shows HTTP, HTTPS, and 51820/UDP                                                                                                                                   |
+| 16   | Service start                     | `systemctl is-active traefik wg-easy cockpit.socket pmcd pmlogger`; the `authelia` user unit is active                                                                                       |
 
 Once all blocks pass, run `sudo ./scripts/host/verify-stack.sh`.
 
@@ -169,10 +173,12 @@ Expected: `301` redirect to HTTPS.
 ### 4.2 Authelia
 
 ```bash
-sudo podman ps | grep authelia
-sudo journalctl -u authelia.service -n 50
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
+  systemctl --user status authelia.service
+sudo journalctl _UID="$(id -u authelia)" -n 50
 curl -s http://127.0.0.1:9091/api/health
-sudo podman exec authelia authelia validate-config --config /config/configuration.yml
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
+  podman exec authelia authelia validate-config --config /config/configuration.yml
 ```
 
 Expected health response: `{"status":"OK"}`.
@@ -188,14 +194,43 @@ curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:51821
 
 Expected: interface `wg0`, a public key, listening port `51820`, and HTTP `200` from the local management UI.
 
+### 4.3.1 Infrastructure container runtime
+
+Authelia is a rootless Quadlet user unit. Manage it as the `authelia` user:
+
+```bash
+AUTHELIA_UID=$(id -u authelia)
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
+  systemctl --user restart authelia.service
+```
+
+wg-easy is a rootful Quadlet system unit inside a user namespace. Manage it with `systemctl`:
+
+```bash
+sudo systemctl restart wg-easy.service
+```
+
+Both units are generated from Quadlet files. Reload after editing a unit file:
+
+```bash
+sudo systemctl daemon-reload
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
+  systemctl --user daemon-reload
+```
+
+The Authelia unit waits for `/data` before it starts. A user unit cannot order after `local-fs.target`.
+
 ### 4.4 Cockpit
 
 ```bash
 systemctl is-active cockpit.socket
 curl -sk -o /dev/null -w "%{http_code}" http://127.0.0.1:9090
+grep -E '^(Origins|ProtocolHeader)' /etc/cockpit/cockpit.conf
 ```
 
-Expected: `active` and HTTP `200`.
+Expected: `active`, HTTP `200`, and the configured `Origins` and `ProtocolHeader` entries.
+
+Then open `https://cockpit.${DOMAIN}` through the VPN. Complete the Authelia and PAM logins, then confirm that the terminal panel connects. The terminal uses a WebSocket and fails if Cockpit does not trust the proxy origin.
 
 ### 4.5 TLS certificate issuance
 
@@ -301,7 +336,7 @@ oci secrets secret-bundle get \
 
 **Causes:**
 
-- YAML syntax error in `traefik.yml` or a dynamic config file.
+- YAML syntax error in `traefik.yaml` or a dynamic config file.
 - SELinux denial on configuration files.
 - Port 80 or 443 already in use.
 
@@ -315,20 +350,29 @@ sudo ss -tlnp | grep -E ':80|:443'
 
 ### Authelia container fails to start
 
-**Symptom:** `authelia.service` is failed.
+**Symptom:** `authelia.service` is failed in the `authelia` user manager.
 
 **Causes:**
 
+- Systemd lingering is not enabled, so the user manager is not running.
+- The subordinate UID or GID range is missing, or it overlaps another service.
 - `/data/authelia/config/configuration.yml` was not copied from the template.
+- `/data/authelia` has the wrong owner or SELinux label.
 - The secret environment variable names are wrong.
-- The image was not pulled.
+- The image was not pulled into the rootless store.
 
 **Checks:**
 
 ```bash
-sudo journalctl -u authelia.service -n 50
-sudo podman images | grep authelia
-ls -l /data/authelia/config/
+AUTHELIA_UID=$(id -u authelia)
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
+  systemctl --user status authelia.service
+sudo journalctl _UID="${AUTHELIA_UID}" -n 50
+loginctl show-user authelia -p Linger
+grep '^authelia:' /etc/subuid /etc/subgid
+ls -ld /data/authelia /data/authelia/config /data/authelia/db
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
+  podman images | grep authelia
 ```
 
 ### TLS certificates are not issued
@@ -354,8 +398,10 @@ sudo journalctl -u traefik.service | grep -i "acme\|cloudflare\|challenge\|error
 
 **Causes:**
 
-- `NET_ADMIN` capability is missing.
+- `NET_ADMIN` or `NET_RAW` capability is missing.
+- The user namespace mapping is missing or the volume has the wrong owner.
 - `net.ipv4.ip_forward` is not set.
+- The `wireguard` module is unavailable and the userspace fallback cannot start.
 - The wg-easy database was not initialised.
 
 **Checks:**
@@ -364,6 +410,9 @@ sudo journalctl -u traefik.service | grep -i "acme\|cloudflare\|challenge\|error
 sysctl net.ipv4.ip_forward
 sudo journalctl -u wg-easy.service -n 50
 sudo podman logs wg-easy
+sudo podman inspect wg-easy --format '{{json .HostConfig.IDMappings}}'
+stat -c '%u:%g' /data/containers/wg-easy
+lsmod | grep wireguard
 ```
 
 ### SELinux blocks a service
@@ -396,7 +445,7 @@ A new `acme.json` is created on start and certificates are issued within minutes
 
 ## 7. Update Traefik
 
-The legacy manual update path is:
+The manual update path is:
 
 ```bash
 TRAEFIK_VERSION="v3.x.y"
@@ -409,7 +458,7 @@ sudo systemctl restart traefik
 traefik version
 ```
 
-The hardened deployment uses a versioned binary layout under `/opt/traefik/releases` and a `traefik-update` script with checksum verification and rollback. The full unit, script, and release layout are in `docs/reference/traefik.md`.
+The hardened design uses a versioned binary layout under `/opt/traefik/releases` and a `traefik-update` script with checksum verification and rollback. The full unit, script, and release layout are in `docs/reference/traefik.md`.
 
 Manual rollback:
 
@@ -470,7 +519,8 @@ NEW_PASS=$(oci secrets secret-bundle get \
   --secret-id <AUTH_SECRET_OCID> \
   --query "data.secretBundleContent.content" \
   --raw-output | base64 -d)
-podman exec authelia authelia crypto hash generate argon2 --password "$NEW_PASS"
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
+  podman exec authelia authelia crypto hash generate argon2 --password "$NEW_PASS"
 ```
 
 Update the resulting hash in `/data/authelia/config/users_database.yaml`. No Traefik restart is needed.
@@ -586,6 +636,13 @@ ls -ld /data/traefik /data/logs/traefik /etc/traefik
 ls -l /data/traefik/letsencrypt/acme.json
 ls -l /etc/traefik/env
 id traefik
+id authelia
+loginctl show-user authelia -p Linger
+grep '^authelia:' /etc/subuid /etc/subgid
+ls -ld /data/authelia /data/containers/wg-easy
+ls -l /etc/containers/systemd/wg-easy.container
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
+  systemctl --user is-active authelia.service
 sudo last -n 20
 sudo ausearch -k traefik_config -ts today
 sudo ausearch -k traefik_state -ts today
@@ -594,6 +651,10 @@ sudo ausearch -k traefik_state -ts today
 Expected posture:
 
 - Traefik runs as `traefik`, not root and not an SSH user.
+- Authelia runs rootless as `authelia`.
+- wg-easy runs in a user namespace with `NET_ADMIN` and `NET_RAW`, and without `SYS_MODULE`.
+- `/data/authelia` is owned by `authelia:authelia`.
+- `/data/containers/wg-easy` is owned by host UID and GID `300000`.
 - `/data/traefik/letsencrypt/acme.json` is mode `0600`.
 - `/etc/traefik/env` is mode `0600` and owned by `traefik:traefik`.
 - `/opt/traefik` and `/etc/traefik` are owned by root.
@@ -601,11 +662,11 @@ Expected posture:
 - No Podman socket is mounted into Traefik.
 - SELinux remains enforcing.
 - Only ports 80, 443, 51820/UDP, and bootstrap SSH are exposed.
-- The Cloudflare token is not present in `traefik.yml`.
+- The Cloudflare token is not present in `traefik.yaml`.
 
 ## 15. Infrastructure as code
 
-`infra/cloud-init/cloud-config.example.yaml` automates the OS layer, but the OCI VCN, subnet, security lists, block volume, Vault, and instance are currently provisioned manually. Terraform can complete the immutable infrastructure picture.
+`infra/cloud-init/cloud-config.example.yaml` automates the OS layer. The OCI VCN, subnet, security lists, block volume, Vault, and instance are prerequisites that the template does not create. Terraform can complete the immutable infrastructure picture.
 
 A minimal layout:
 
@@ -619,7 +680,7 @@ terraform/
 └── variables.tf  # Domain, region, compartment OCID
 ```
 
-Terraform state should use OCI Object Storage as a remote backend. This is not part of v1.0 until ADR-007 is written.
+Terraform state should use OCI Object Storage as a remote backend. This is not part of v1.0 until ADR-007 is decided.
 
 ## Related documents
 

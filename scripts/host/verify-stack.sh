@@ -138,7 +138,6 @@ header "4. Service Health"
 
 SERVICES=(
   "traefik.service"
-  "authelia.service"
   "wg-easy.service"
   "cockpit.socket"
   "pmcd.service"
@@ -153,7 +152,101 @@ for svc in "${SERVICES[@]}"; do
     STATE=$(systemctl is-active "$svc" 2>/dev/null || echo "unknown")
     fail "${svc} is ${STATE}"
   fi
+
+  if systemctl is-enabled --quiet "$svc"; then
+    pass "${svc} is enabled at boot"
+  else
+    STATE=$(systemctl is-enabled "$svc" 2>/dev/null || echo "unknown")
+    fail "${svc} is not enabled at boot (${STATE})"
+  fi
 done
+
+AUTHELIA_UID=$(id -u authelia 2>/dev/null || true)
+if [[ -n "$AUTHELIA_UID" ]]; then
+  if runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
+    systemctl --user is-active --quiet authelia.service; then
+    pass "authelia.service is active (rootless user unit)"
+  else
+    STATE=$(runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
+      systemctl --user is-active authelia.service 2>/dev/null || echo "unknown")
+    fail "authelia.service is ${STATE} (rootless user unit)"
+  fi
+
+  if runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
+    systemctl --user is-enabled --quiet authelia.service; then
+    pass "authelia.service is enabled at boot (rootless user unit)"
+  else
+    STATE=$(runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
+      systemctl --user is-enabled authelia.service 2>/dev/null || echo "unknown")
+    fail "authelia.service is not enabled at boot (${STATE})"
+  fi
+
+  LINGER=$(loginctl show-user authelia -p Linger --value 2>/dev/null || true)
+  if [[ "$LINGER" == "yes" ]]; then
+    pass "systemd lingering is enabled for authelia"
+  else
+    fail "systemd lingering is not enabled for authelia"
+  fi
+
+  SUBUID=$(awk -F: '$1 == "authelia" { print $2 ":" $3; exit }' /etc/subuid)
+  if [[ "$SUBUID" == "400000:65536" ]]; then
+    pass "authelia subordinate UID range is 400000:65536"
+  else
+    fail "authelia subordinate UID range is ${SUBUID:-missing} (expected 400000:65536)"
+  fi
+
+  if [[ -f "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container" ]]; then
+    pass "authelia Quadlet unit is installed under the user directory"
+  else
+    fail "authelia Quadlet unit is missing"
+  fi
+else
+  fail "authelia user does not exist"
+fi
+
+if [[ -f /etc/containers/systemd/wg-easy.container ]]; then
+  pass "wg-easy Quadlet unit is installed"
+else
+  fail "wg-easy Quadlet unit is missing"
+fi
+
+if [[ "$(stat -c %U /data/authelia 2>/dev/null || true)" == "authelia" ]]; then
+  pass "/data/authelia is owned by authelia"
+else
+  fail "/data/authelia is not owned by authelia"
+fi
+
+if [[ "$(stat -c %u /data/containers/wg-easy 2>/dev/null || true)" == "300000" ]]; then
+  pass "/data/containers/wg-easy is owned by host UID 300000"
+else
+  fail "/data/containers/wg-easy is not owned by host UID 300000"
+fi
+
+WG_IDMAP=$(podman inspect wg-easy --format '{{json .HostConfig.IDMappings}}' 2>/dev/null || true)
+if [[ "$WG_IDMAP" == *"300000"* ]]; then
+  pass "wg-easy container root maps to host UID 300000"
+else
+  fail "wg-easy user namespace mapping is missing"
+fi
+
+WG_CAPS=$(podman inspect wg-easy --format '{{json .HostConfig.CapAdd}}' 2>/dev/null || true)
+if [[ "$WG_CAPS" == *"NET_ADMIN"* && "$WG_CAPS" == *"NET_RAW"* ]]; then
+  pass "wg-easy has NET_ADMIN and NET_RAW"
+else
+  fail "wg-easy is missing NET_ADMIN or NET_RAW"
+fi
+if [[ "$WG_CAPS" == *"SYS_MODULE"* ]]; then
+  fail "wg-easy has SYS_MODULE (it must not)"
+else
+  pass "wg-easy does not have SYS_MODULE"
+fi
+
+COCKPIT_BINDS=$(ss -ltnH 2>/dev/null | awk '$4 ~ /:9090$/ {print $4}' || true)
+if [[ "$COCKPIT_BINDS" == "127.0.0.1:9090" ]]; then
+  pass "Cockpit listens only on 127.0.0.1:9090"
+else
+  fail "Cockpit must listen only on 127.0.0.1:9090 (observed: ${COCKPIT_BINDS:-no listener})"
+fi
 
 # --------------------------------------------------------------
 # 5. TLS Certificate Issuance
@@ -186,9 +279,9 @@ fi
 # --------------------------------------------------------------
 header "6. WireGuard (via wg-easy)"
 
-if wg show wg0 &>/dev/null; then
-  PEER_COUNT=$(wg show wg0 peers 2>/dev/null | wc -l)
-  pass "WireGuard interface wg0 is up"
+if podman exec wg-easy wg show wg0 &>/dev/null; then
+  PEER_COUNT=$(podman exec wg-easy wg show wg0 peers 2>/dev/null | wc -l)
+  pass "WireGuard interface wg0 is up inside the wg-easy container"
   if [[ "$PEER_COUNT" -gt 0 ]]; then
     pass "${PEER_COUNT} peer(s) configured"
   else
@@ -259,10 +352,12 @@ else
   fail "firewalld: UDP 51820 not permitted"
 fi
 
-if firewall-cmd --list-rich-rules --permanent 2>/dev/null | grep -q "10.0.0.0/24.*cockpit"; then
-  pass "firewalld: Cockpit access restricted to VPN subnet (10.0.0.0/24)"
+if firewall-cmd --query-service=cockpit --permanent &>/dev/null || \
+  firewall-cmd --query-port=9090/tcp --permanent &>/dev/null || \
+  firewall-cmd --list-rich-rules --permanent 2>/dev/null | grep -q 'cockpit'; then
+  fail "firewalld: direct Cockpit access is permitted; Cockpit must be reached through Traefik and Authelia"
 else
-  fail "firewalld: Cockpit VPN restriction rule missing"
+  pass "firewalld: no direct Cockpit access"
 fi
 
 # Port 8082 (metrics) should NOT be open externally
@@ -285,7 +380,8 @@ echo ""
 
 if [[ "$FAIL" -gt 0 ]]; then
   echo -e "${RED}One or more checks failed. Review the output above.${RESET}"
-  echo "For detailed logs: sudo journalctl -u <service-name> -n 50"
+  echo "For detailed system-unit logs: sudo journalctl -u <service-name> -n 50"
+  echo "For Authelia user-unit logs: sudo journalctl _UID=<authelia-uid> -n 50"
   echo "For cloud-init output: sudo cat /var/log/cloud-init-output.log"
   exit 1
 else
