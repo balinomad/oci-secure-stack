@@ -3,8 +3,8 @@ name: "Getting Started"
 description: |
   End-to-end tutorial for provisioning the OCI secure stack from a clean Oracle Cloud Infrastructure environment.
 status: draft
-version: 1.0
-updated: 2026-11-12
+version: 1.1
+updated: 2026-11-13
 ---
 
 # Getting Started
@@ -24,6 +24,11 @@ All of the following must exist before the instance is launched. Cloud-init cann
 - An OCI Vault with three secrets.
 - A Cloudflare zone and an API token with `Zone → DNS → Edit` permission on that zone.
 - DNS records for every hostname in section 5.
+- A workstation with `yq` v4 and `envsubst` for rendering the deployment file.
+
+### Free Tier fit
+
+The stack targets Oracle Cloud Always Free. As of 2026-11-13, Oracle documents two AMD Micro instances, an Ampere A1 allowance equivalent to two OCPUs and 12 GB of memory, and 200 GB of block storage shared with boot volumes. Oracle publishes the current figures in [Always Free Resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm). One instance with the default 50 GB boot volume and a 50 GB block volume fits the documented allowance. The minimum practical shape is not yet verified. Confirm the allowance in the OCI console before provisioning.
 
 SSH hardening: Oracle Linux 9 OCI images disable password authentication by default. Verify before exposing port 22:
 
@@ -158,13 +163,14 @@ A wildcard record means new application services resolve without adding individu
 
 ## 6. Render the deployment file
 
-Create `.env` as described in section 3, then render the template. Pass only the six template variables to `envsubst` so shell variables inside `runcmd` remain intact.
+Create `.env` as described in section 3. Render the component configuration into the cloud-config template, then substitute only the six template variables. The renderer requires `yq` v4. Pass only the six variables to `envsubst` so shell variables inside `runcmd` remain intact.
 
 ```bash
 export $(cat .env | xargs)
 
-envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
-  < infra/cloud-init/cloud-config.example.yaml > cloud-config.yaml
+scripts/repo/render-config.sh \
+  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
+  > cloud-config.yaml
 ```
 
 The output `cloud-config.yaml` is the file to paste into the OCI Console **User data** field. You can also pass it with the OCI CLI:

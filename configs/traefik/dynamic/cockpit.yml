@@ -1,0 +1,18 @@
+http:
+  routers:
+    cockpit:
+      rule: "Host(`cockpit.${DOMAIN}`)"
+      entryPoints:
+        - websecure
+      service: cockpit-svc
+      middlewares:
+        - admin-chain
+      tls:
+        certResolver: cloudflare
+
+  services:
+    cockpit-svc:
+      loadBalancer:
+        passHostHeader: true   # Required for Cockpit WebSocket support
+        servers:
+          - url: "http://127.0.0.1:9090"

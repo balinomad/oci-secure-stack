@@ -2,7 +2,7 @@
 
 A cloud-init-based provisioning template for a single Oracle Linux 9 admin stack on Oracle Cloud Infrastructure. The design exposes only Traefik and WireGuard publicly. It keeps administrative surfaces behind WireGuard and Authelia and stores persistent state on a separate block volume.
 
-The project was created with the Oracle Cloud Free Tier, specifically its Always Free services, as one target use case. Always Free services are not a requirement. The template also runs on paid OCI shapes and larger block volumes.
+The project was created with the Oracle Cloud Free Tier, specifically its Always Free services, as one target use case. Always Free services are not a requirement. The template also targets paid OCI shapes and larger block volumes.
 
 The stack is designed but not yet proven in a deployment. See [docs/process/project-status.md](docs/process/project-status.md) for the current state and evidence.
 
@@ -39,12 +39,13 @@ All state, including certificates, user accounts, WireGuard keys, and container 
 
    ```bash
    export $(cat .env | xargs)
-   envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
-     < infra/cloud-init/cloud-config.example.yaml > cloud-config.yaml
+   scripts/repo/render-config.sh \
+     | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID}' \
+     > cloud-config.yaml
    ```
 
 4. Launch the instance with `cloud-config.yaml` as user data and attach the block volume.
-5. After first boot, copy `scripts/host/verify-stack.sh` to the instance. Run it as root from a repository checkout.
+5. After first boot, run `scripts/host/verify-stack.sh` as root from a repository checkout on the instance.
 
 The complete sequence, including the first WireGuard peer bootstrap, is in [docs/guides/getting-started.md](docs/guides/getting-started.md).
 
@@ -58,6 +59,7 @@ The design requires the following controls. The current implementation does not 
 - Traefik issues TLS certificates through Let's Encrypt DNS-01 with a Cloudflare token stored in OCI Vault.
 - Cloud-init fetches secrets at boot with Instance Principal authentication. Contributors do not commit secrets to the repository.
 - SELinux runs in enforcing mode. Traefik runs as a dedicated system user with minimal capabilities.
+- Authelia runs rootless as a dedicated system user. wg-easy runs inside a user namespace with only `NET_ADMIN` and `NET_RAW`.
 
 The full security model, threat model, and non-goals are in [docs/architecture.md](docs/architecture.md). Report vulnerabilities through [SECURITY.md](SECURITY.md).
 
@@ -68,16 +70,19 @@ The full security model, threat model, and non-goals are in [docs/architecture.m
 - Cloudflare account managing the target DNS zone
 - Oracle Linux 9 instance, AMD or ARM
 - Separate block volume, 50 GB minimum
+- Workstation with `yq` v4 and `envsubst`
 
 ## Repository layout
 
-| Path                                         | Purpose                                                      |
-| -------------------------------------------- | ------------------------------------------------------------ |
-| `infra/cloud-init/cloud-config.example.yaml` | Cloud-init template; render with `envsubst` before deploying |
-| `.env.example`                               | Variable template; copy to `.env` and fill in values         |
-| `scripts/host/deploy-service.sh`             | Deploy a new Podman container service                        |
-| `scripts/host/verify-stack.sh`               | Post-deployment verification                                 |
-| `docs/`                                      | Design, decisions, guides, reference, and process records    |
+| Path                                         | Purpose                                                       |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| `infra/cloud-init/cloud-config.example.yaml` | Cloud-init template; render before deploying                  |
+| `configs/`                                   | Component configuration sources and manifest                  |
+| `scripts/repo/render-config.sh`              | Render component configuration into the cloud-config template |
+| `.env.example`                               | Variable template; copy to `.env` and fill in values          |
+| `scripts/host/deploy-service.sh`             | Deploy a new Podman container service                         |
+| `scripts/host/verify-stack.sh`               | Post-deployment verification                                  |
+| `docs/`                                      | Design, decisions, guides, reference, and process records     |
 
 ## Contributing
 

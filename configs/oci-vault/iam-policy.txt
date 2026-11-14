@@ -1,0 +1,3 @@
+matching_rule = "instance.compartment.id = '<compartment-ocid>'"
+
+Allow dynamic-group <dynamic-group-name> to read secret-family in compartment <compartment-name>

@@ -1,0 +1,105 @@
+http:
+  routers:
+    # Authelia SSO portal , VPN-restricted, no forwardAuth (avoids circular redirect)
+    authelia:
+      rule: "Host(`auth.${DOMAIN}`)"
+      entryPoints:
+        - websecure
+      service: authelia-svc
+      middlewares:
+        - wg-allowlist
+      tls:
+        certResolver: cloudflare
+
+    # Traefik dashboard , VPN + Authelia 2FA
+    dashboard:
+      rule: "Host(`traefik.${DOMAIN}`)"
+      entryPoints:
+        - websecure
+      service: api@internal
+      middlewares:
+        - admin-chain
+      tls:
+        certResolver: cloudflare
+
+    # Prometheus metrics endpoint , VPN + Authelia 1FA (read-only data)
+    prometheus:
+      rule: "Host(`metrics.${DOMAIN}`)"
+      entryPoints:
+        - websecure
+      service: prometheus-svc
+      middlewares:
+        - admin-chain
+      tls:
+        certResolver: cloudflare
+
+    # WireGuard management UI , VPN + Authelia 2FA
+    wg-easy:
+      rule: "Host(`wg.${DOMAIN}`)"
+      entryPoints:
+        - websecure
+      service: wg-easy-svc
+      middlewares:
+        - admin-chain
+      tls:
+        certResolver: cloudflare
+
+  services:
+    authelia-svc:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:9091"
+
+    prometheus-svc:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:8082"
+
+    wg-easy-svc:
+      loadBalancer:
+        servers:
+          - url: "http://127.0.0.1:51821"
+
+  middlewares:
+    # IP allowlist: only WireGuard VPN subnet permitted
+    wg-allowlist:
+      ipAllowList:
+        sourceRange:
+          - "10.0.0.0/24"
+
+    # Authelia forwardAuth: delegates all authentication to Authelia
+    authelia-forward-auth:
+      forwardAuth:
+        address: "http://127.0.0.1:9091/api/authz/forward-auth"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - "Remote-User"
+          - "Remote-Groups"
+          - "Remote-Name"
+          - "Remote-Email"
+
+    # Admin middleware chain: IP check first, then Authelia
+    admin-chain:
+      chain:
+        middlewares:
+          - wg-allowlist
+          - authelia-forward-auth
+
+    # Global security headers applied to all admin routes
+    # Applications should add their own CSP , see docs/guides/adding-apps.md section 5
+    global-security-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: false
+        forceSTSHeader: true
+        frameDeny: true
+        contentTypeNosniff: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      sniStrict: true

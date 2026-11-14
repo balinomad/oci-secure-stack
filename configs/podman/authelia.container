@@ -1,0 +1,22 @@
+[Unit]
+Description=Authelia SSO and MFA Gateway
+
+[Container]
+ContainerName=authelia
+Image=authelia/authelia:4.39
+PublishPort=127.0.0.1:9091:9091
+EnvironmentFile=/data/authelia/env
+Volume=/data/authelia/config:/config:Z
+Volume=/data/authelia/db:/data:Z
+UserNS=keep-id
+NoNewPrivileges=true
+ReadOnly=true
+Exec=authelia --config /config/configuration.yml
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+ExecStartPre=/bin/sh -c 'for _ in $(/usr/bin/seq 1 90); do /usr/bin/mountpoint -q /data && exit 0; sleep 2; done; exit 1'
+
+[Install]
+WantedBy=default.target

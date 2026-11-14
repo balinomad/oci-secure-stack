@@ -1,0 +1,6 @@
+# Reserved for a future optional Prometheus deployment.
+# ADR-003 selects PCP for v1.0 and excludes a full Prometheus server,
+# TSDB, and Alertmanager. Do not enable this component without a new decision.
+# Add scrape_configs only after a decision defines the exporters.
+global:
+  scrape_interval: 60s

@@ -1,0 +1,24 @@
+[Unit]
+Description=WireGuard Easy Management UI
+
+[Container]
+ContainerName=wg-easy
+Image=ghcr.io/wg-easy/wg-easy:15
+PublishPort=51820:51820/udp
+PublishPort=127.0.0.1:51821:51821/tcp
+EnvironmentFile=/data/containers/wg-easy/env
+Volume=/data/containers/wg-easy:/etc/wireguard:Z
+AddCapability=NET_ADMIN NET_RAW
+AddDevice=/dev/net/tun
+Sysctl=net.ipv4.ip_forward=1 net.ipv4.conf.all.src_valid_mark=1
+UIDMap=0:300000:65536
+GIDMap=0:300000:65536
+NoNewPrivileges=true
+PidsLimit=256
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,224 @@
+# Configuration manifest.
+# scripts/repo/render-config.sh reads this file and maps the source tree to
+# host paths. stage: true means the renderer emits a write_files entry.
+# Do not store secret values in this file.
+version: 1
+
+files:
+  - source: configs/traefik/traefik.yml
+    target: /etc/traefik/traefik.yaml
+    owner: traefik:traefik
+    mode: "0644"
+    format: yaml
+    validate: traefik
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/traefik/dynamic/infra.yml
+    target: /etc/traefik/config/infra.yaml
+    owner: traefik:traefik
+    mode: "0644"
+    format: yaml
+    validate: traefik
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/traefik/dynamic/cockpit.yml
+    target: /etc/traefik/config/cockpit.yaml
+    owner: traefik:traefik
+    mode: "0644"
+    format: yaml
+    validate: traefik
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/traefik/env.example
+    target: /etc/traefik/env
+    owner: traefik:traefik
+    mode: "0600"
+    format: text
+    validate: null
+    secret: true
+    generated: true
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/traefik/logrotate.conf
+    target: /etc/logrotate.d/traefik
+    owner: root:root
+    mode: "0644"
+    format: text
+    validate: logrotate
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/traefik.service
+    target: /etc/systemd/system/traefik.service
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: systemd-analyze verify
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/authelia/configuration.yml
+    target: /etc/authelia/configuration.yml
+    runtime_target: /data/authelia/config/configuration.yml
+    owner: root:root
+    mode: "0600"
+    format: yaml
+    validate: authelia
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/authelia/env.example
+    target: /data/authelia/env
+    owner: authelia:authelia
+    mode: "0600"
+    format: text
+    validate: null
+    secret: true
+    generated: true
+    enabled: true
+    stage: false
+    status: active
+
+  - source: configs/podman/authelia.container
+    target: /etc/authelia/authelia.container
+    runtime_target: /etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container
+    owner: root:root
+    mode: "0644"
+    format: quadlet
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/cockpit/cockpit.conf
+    target: /etc/cockpit/cockpit.conf
+    owner: root:root
+    mode: "0644"
+    format: ini
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/systemd/cockpit.socket.d/listen.conf
+    target: /etc/systemd/system/cockpit.socket.d/listen.conf
+    owner: root:root
+    mode: "0644"
+    format: systemd
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/podman/wg-easy.container
+    target: /etc/containers/systemd/wg-easy.container
+    owner: root:root
+    mode: "0644"
+    format: quadlet
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/wg-easy/env.example
+    target: /data/containers/wg-easy/env
+    owner: "300000:300000"
+    mode: "0600"
+    format: text
+    validate: null
+    secret: true
+    generated: true
+    enabled: true
+    stage: false
+    status: active
+
+  - source: configs/wg-easy/config.json
+    target: null
+    owner: null
+    mode: null
+    format: json
+    validate: jq
+    secret: false
+    generated: false
+    enabled: false
+    stage: false
+    status: reference
+
+  - source: configs/wireguard/modules-load.conf
+    target: /etc/modules-load.d/wireguard.conf
+    owner: root:root
+    mode: "0644"
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: true
+    stage: true
+    status: active
+
+  - source: configs/prometheus/prometheus.yml
+    target: /etc/prometheus/prometheus.yml
+    owner: prometheus:prometheus
+    mode: "0644"
+    format: yaml
+    validate: promtool check config
+    secret: false
+    generated: false
+    enabled: false
+    stage: false
+    status: reserved
+
+  - source: configs/oci-vault/iam-policy.txt
+    target: null
+    owner: null
+    mode: null
+    format: text
+    validate: null
+    secret: false
+    generated: false
+    enabled: false
+    stage: false
+    status: reference
+
+  - source: configs/oci-vault/secrets.yaml
+    target: null
+    owner: null
+    mode: null
+    format: yaml
+    validate: null
+    secret: false
+    generated: false
+    enabled: false
+    stage: false
+    status: reference

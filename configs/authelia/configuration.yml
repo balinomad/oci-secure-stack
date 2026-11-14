@@ -1,0 +1,61 @@
+server:
+  address: 'tcp://0.0.0.0:9091/'
+
+log:
+  level: info
+  format: json
+
+totp:
+  issuer: ${DOMAIN}
+  period: 30
+  skew: 1
+
+authentication_backend:
+  file:
+    path: /config/users_database.yaml
+    password:
+      algorithm: argon2
+      argon2:
+        variant: argon2id
+        iterations: 3
+        memory: 65536
+        parallelism: 4
+        key_length: 32
+        salt_length: 16
+
+access_control:
+  default_policy: deny
+  rules:
+    # Authelia portal itself must be reachable without auth (avoids circular redirect)
+    - domain: auth.${DOMAIN}
+      policy: bypass
+    # Metrics is read-only; 1FA sufficient
+    - domain: metrics.${DOMAIN}
+      policy: one_factor
+    # All management surfaces require 2FA
+    - domain:
+        - traefik.${DOMAIN}
+        - cockpit.${DOMAIN}
+        - wg.${DOMAIN}
+      policy: two_factor
+
+session:
+  cookies:
+    - domain: ${DOMAIN}
+      authelia_url: https://auth.${DOMAIN}
+      name: authelia_session
+      same_site: lax
+      inactivity: 5m
+      expiration: 1h
+      remember_me: 1w
+
+storage:
+  local:
+    path: /data/db.sqlite3
+
+notifier:
+  filesystem:
+    filename: /data/notifications.txt
+
+# Secrets (jwt_secret, session.secret) are injected via environment
+# variables in /data/authelia/env , generated on first boot
