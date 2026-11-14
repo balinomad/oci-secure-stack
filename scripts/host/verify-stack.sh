@@ -10,6 +10,7 @@
 #   - Block volume mount and symlinks
 #   - Service health (Traefik, Authelia, wg-easy, Cockpit, PCP)
 #   - PCP export and optional Grafana/Valkey services
+#   - Alert delivery services, timers, rules, and secrets
 #   - TLS certificate issuance
 #   - WireGuard interface
 #   - SELinux status and AVC denials
@@ -114,7 +115,8 @@ for dir in \
   /data/logs/traefik \
   /data/containers/wg-easy \
   /data/monitoring/grafana \
-  /data/monitoring/valkey; do
+  /data/monitoring/valkey \
+  /data/monitoring/alerting; do
   if [[ -d "$dir" ]]; then
     pass "Directory exists: ${dir}"
   else
@@ -147,6 +149,10 @@ SERVICES=(
   "pmlogger.service"
   "pmproxy.service"
   "auditd.service"
+  "pcp-alert-pmie.service"
+  "pcp-service-check.timer"
+  "pcp-cert-check.timer"
+  "pcp-heartbeat.timer"
 )
 
 for svc in "${SERVICES[@]}"; do
@@ -317,6 +323,75 @@ if systemctl list-unit-files --no-legend valkey.service 2>/dev/null | grep -q '^
 else
   warn "Valkey is not installed (history profile is not enabled)"
 fi
+
+# --------------------------------------------------------------
+# 4.2 Alert Delivery
+# --------------------------------------------------------------
+header "4.2 Alert Delivery"
+
+if [[ -x /usr/local/libexec/stack-alerting ]]; then
+  pass "Alerting runtime is installed at /usr/local/libexec/stack-alerting"
+else
+  fail "Alerting runtime is missing at /usr/local/libexec/stack-alerting"
+fi
+
+ALERT_SHELL=$(getent passwd alerting 2>/dev/null | cut -d: -f7 || true)
+if [[ "$ALERT_SHELL" == "/usr/sbin/nologin" ]]; then
+  pass "The alerting user exists with a nologin shell"
+else
+  fail "The alerting user is missing or has a login shell (${ALERT_SHELL:-missing})"
+fi
+
+if [[ -f /etc/pcp/pmie/stack-alerts.pmie ]]; then
+  pass "pmie alert rules are installed"
+else
+  fail "pmie alert rules are missing"
+fi
+
+if [[ -f /etc/pcp/alerting/services.list ]]; then
+  pass "Alert service check list is installed"
+else
+  fail "Alert service check list is missing"
+fi
+
+if runuser -u alerting -- pmie -C -c /etc/pcp/pmie/stack-alerts.pmie >/dev/null 2>&1; then
+  pass "pmie accepts the alert rules"
+else
+  fail "pmie rejects the alert rules"
+fi
+
+if [[ -d /var/lib/stack-alerting/state ]]; then
+  pass "Alerting state directory exists"
+else
+  fail "Alerting state directory is missing at /var/lib/stack-alerting/state"
+fi
+
+if [[ -f /data/monitoring/alerting/env ]]; then
+  ALERT_ENV_OWNER=$(stat -c %U /data/monitoring/alerting/env 2>/dev/null || true)
+  ALERT_ENV_MODE=$(stat -c %a /data/monitoring/alerting/env 2>/dev/null || true)
+  if [[ "$ALERT_ENV_OWNER" == "alerting" && "$ALERT_ENV_MODE" == "600" ]]; then
+    pass "Alerting environment file is owned by alerting with mode 600"
+  else
+    fail "Alerting environment file ownership or mode is wrong (${ALERT_ENV_OWNER:-missing}:${ALERT_ENV_MODE:-missing})"
+  fi
+else
+  fail "Alerting environment file is missing at /data/monitoring/alerting/env"
+fi
+
+for dropin in \
+  /etc/systemd/system/traefik.service.d/onfailure.conf \
+  /etc/systemd/system/wg-easy.service.d/onfailure.conf \
+  /etc/systemd/system/pmcd.service.d/onfailure.conf \
+  /etc/systemd/system/pmlogger.service.d/onfailure.conf \
+  /etc/systemd/system/pmproxy.service.d/onfailure.conf \
+  /etc/systemd/system/grafana-server.service.d/onfailure.conf \
+  /etc/systemd/system/valkey.service.d/onfailure.conf; do
+  if [[ -f "$dropin" ]]; then
+    pass "Failure hook installed: ${dropin}"
+  else
+    fail "Failure hook missing: ${dropin}"
+  fi
+done
 
 # --------------------------------------------------------------
 # 5. TLS Certificate Issuance
