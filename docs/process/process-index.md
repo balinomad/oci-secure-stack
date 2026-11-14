@@ -3,8 +3,8 @@ name: "Process Record"
 description: |
   Index and maintenance rules for the project process record, including the status legend and evidence rules.
 status: active
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # Process Record
@@ -30,6 +30,7 @@ Project-defining material lives outside this directory:
 | Configuration source   | `configs/manifest.yaml`                      |
 | Configuration renderer | `scripts/repo/render-config.sh`              |
 | Host verification      | `scripts/host/verify-stack.sh`               |
+| Monitoring deployment  | `scripts/host/deploy/07-monitoring.sh`       |
 | Application deployment | `scripts/host/deploy-service.sh`             |
 | Documentation audit    | `scripts/repo/audit-docs.sh`                 |
 

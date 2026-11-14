@@ -3,8 +3,8 @@ name: "Acceptance Criteria"
 description: |
   Acceptance checklist for proving a deployment, covering prerequisites, boot, services, security, recovery, and release criteria.
 status: active
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # Acceptance Criteria
@@ -51,7 +51,7 @@ Evidence source: command output, log excerpt, test screenshot, or a linked findi
 | S9  | Cockpit is active and reachable through Traefik       | Browser test                                   | Claimed |
 | S10 | Cockpit WebSocket terminal works through Traefik      | Browser test                                   | Claimed |
 | S11 | The chosen metrics endpoint returns data              | `curl`                                         | Claimed |
-| S12 | PCP services are active, if PCP is in scope           | `systemctl`                                    | Claimed |
+| S12 | PCP is active, pmproxy responds, and the selected monitoring profile is healthy | `systemctl`, `curl`, `pminfo` | Claimed |
 
 ## 4. Security controls
 

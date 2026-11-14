@@ -3,8 +3,8 @@ name: "Project Status Report"
 description: |
   Static assessment of repository state, documentation state, implementation status, risks, and explicit non-claims.
 status: active
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # Project Status Report
@@ -35,9 +35,8 @@ This report covers the project defined in `docs/architecture.md`. It records rep
 | Cloud-init template    | Template with generated markers     | `infra/cloud-init/cloud-config.example.yaml`                                  |
 | Verification script    | Non-empty, shellcheck clean         | `scripts/host/verify-stack.sh`; `shellcheck scripts/host/verify-stack.sh`     |
 | Deployment script      | Non-empty, shellcheck clean         | `scripts/host/deploy-service.sh`; `shellcheck scripts/host/deploy-service.sh` |
-| Modular deploy scripts | Empty                               | `scripts/host/deploy/00-06`                                                   |
+| Modular deploy scripts | Partial                             | `scripts/host/deploy/00-06` empty; `scripts/host/deploy/07-monitoring.sh` active |
 | Extracted configs      | Populated, manifest and renderer    | `configs/manifest.yaml`; `scripts/repo/render-config.sh --check`              |
-| Makefile               | Empty                               | `Makefile`                                                                    |
 | Documentation          | Consolidated, no empty placeholders | `README.md`, `docs/`                                                          |
 | Planning and research  | Substantive, kept as evidence       | `tmp/unverified/`, `tmp/legacy/work-plan.md`                                  |
 | CI                     | None                                | `.github/workflows` empty                                                     |
@@ -80,13 +79,14 @@ Implemented in the monolith:
 - Architecture-aware Traefik download
 - Manifest replay for application services after VM replacement
 - Verification and application deployment scripts
+- PCP export through `pmproxy`, the Podman PMDA, and the OpenMetrics PMDA
+- Optional Grafana and Valkey monitoring profiles, statically configured
 
 Not implemented:
 
 - Terraform or any IaC for VCN, subnet, instance, block volume, Vault, IAM, DNS
-- Restic backup, timer, and fourth Vault secret
-- PCP Prometheus export
-- Health checks, alerting, certificate expiry monitoring
+- Restic backup, timer, and backup secret
+- Health checks beyond PCP collection, alert delivery, certificate expiry monitoring
 - CI, linting, schema validation, or tests
 - Changelog, releases, version-pin verification
 - Any deployment evidence
