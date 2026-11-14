@@ -3,7 +3,7 @@ name: "Authelia Reference"
 description: |
   Exact Authelia runtime, authentication, storage, session, secret, and access-control configuration, including the conditions for adding Valkey session storage.
 status: draft
-version: 1.0
+version: 1.1
 updated: 2026-11-14
 ---
 
@@ -54,13 +54,16 @@ The deployment creates the `admin` user on first boot. It takes the initial pass
 
 Authelia uses the local SQLite storage provider.
 
-| Property       | Value                                |
-| -------------- | ------------------------------------ |
-| Container path | `/data/authelia.sqlite3`             |
-| Host path      | `/data/authelia/db/authelia.sqlite3` |
-| Directory mode | `0700`                               |
+| Property       | Value                                                     |
+| -------------- | --------------------------------------------------------- |
+| Container path | `/data/authelia.sqlite3`                                  |
+| Host path      | `/data/authelia/db/authelia.sqlite3`                      |
+| Directory mode | `0700`                                                    |
+| Encryption key | `AUTHELIA_STORAGE_ENCRYPTION_KEY` in `/data/authelia/env` |
 
 The Quadlet unit maps `/data/authelia/db` to `/data` inside the container. The SQLite file holds durable Authelia state, including TOTP secrets and registered two-factor devices. It does not store the active session records. Include `/data/authelia/db` in the block-volume backup scope.
+
+The storage encryption key encrypts sensitive database columns. Preserve the key with the database. Do not replace the key after the database contains data. A key change requires the Authelia storage command for encryption key changes.
 
 ## 5. Session behavior
 
@@ -98,6 +101,7 @@ The deployment generates these values on first boot and stores them in `/data/au
 
 - `AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET`
 - `AUTHELIA_SESSION_SECRET`
+- `AUTHELIA_STORAGE_ENCRYPTION_KEY`
 - `PUID` and `PGID`
 - `UMASK=0077`
 

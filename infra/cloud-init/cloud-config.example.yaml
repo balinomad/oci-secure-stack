@@ -400,10 +400,15 @@ runcmd:
     if [ ! -f /data/authelia/env ]; then
       JWT_SECRET=$(openssl rand -hex 32)
       SESSION_SECRET=$(openssl rand -hex 32)
+      STORAGE_ENCRYPTION_KEY=$(openssl rand -hex 32)
       {
         echo "AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${JWT_SECRET}"
         echo "AUTHELIA_SESSION_SECRET=${SESSION_SECRET}"
+        echo "AUTHELIA_STORAGE_ENCRYPTION_KEY=${STORAGE_ENCRYPTION_KEY}"
       } > /data/authelia/env
+    fi
+    if ! grep -q '^AUTHELIA_STORAGE_ENCRYPTION_KEY=' /data/authelia/env; then
+      printf 'AUTHELIA_STORAGE_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" >> /data/authelia/env
     fi
     if ! grep -q '^PUID=' /data/authelia/env; then
       printf 'PUID=%s\nPGID=%s\n' "$AUTHELIA_UID" "$AUTHELIA_GID" >> /data/authelia/env

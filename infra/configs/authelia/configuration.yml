@@ -54,5 +54,5 @@ notifier:
   filesystem:
     filename: /data/notifications.txt
 
-# Secrets (jwt_secret, session.secret) are injected via environment
-# variables in /data/authelia/env , generated on first boot
+# Secrets (jwt_secret, session.secret, storage.encryption_key) are injected
+# via environment variables in /data/authelia/env, generated on first boot
