@@ -15,34 +15,34 @@ The stack owns routing, TLS termination, authentication infrastructure, persiste
 
 ## 1. Responsibility boundaries
 
-| Layer                                         | Mandatory      | Optional |
-| --------------------------------------------- | -------------- | -------- |
-| Podman Quadlet for container lifecycle        | Yes            | No       |
-| Traefik for HTTP routing and TLS              | Yes            | No       |
-| `127.0.0.1` network binding                   | Yes            | No       |
-| `/data/containers/<app>/` for persistent data | Yes            | No       |
-| Restic backup via `/data/`                    | Yes, automatic | No       |
-| Authelia for authentication                   | No             | Yes      |
-| OCI Vault for secrets                         | No             | Yes      |
-| Stack logging conventions                     | No             | Yes      |
-| OpenMetrics exposure for PCP ingestion        | No             | Yes      |
+| Layer                                         | Mandatory            | Optional |
+| --------------------------------------------- | -------------------- | -------- |
+| Podman Quadlet for container lifecycle        | Yes                  | No       |
+| Traefik for HTTP routing and TLS              | Yes                  | No       |
+| `127.0.0.1` network binding                   | Yes                  | No       |
+| `/data/containers/<app>/` for persistent data | Yes                  | No       |
+| Restic backup via `/data/`                    | Yes, automatic       | No       |
+| Authelia for authentication                   | No                   | Yes      |
+| OCI Vault for secrets                         | No                   | Yes      |
+| Stack logging conventions                     | No                   | Yes      |
+| OpenMetrics exposure for PCP ingestion        | Yes, where supported | No       |
 
-| Concern                       | Stack owns                                        | Application owns                                    |
-| ----------------------------- | ------------------------------------------------- | --------------------------------------------------- |
-| TLS certificates              | Issuance, renewal, termination                    | Nothing                                             |
-| HTTP routing                  | Domain assignment, middleware chains              | Route config file in `/etc/traefik/config/`         |
-| Global security headers       | HSTS, `X-Frame-Options`, `X-Content-Type-Options` | Content-Security-Policy                             |
-| Authentication infrastructure | Authelia SSO                                      | Auth integration choice                             |
-| Authorization                 | Coarse group-based via Authelia                   | Fine-grained RBAC in the application                |
-| Container lifecycle           | systemd via Quadlet                               | Image, ports, environment, health                   |
-| Persistent storage            | Block volume mount at `/data/`                    | Directory structure under `/data/containers/<app>/` |
-| Backup                        | Restic covers all of `/data/`                     | Storing data under `/data/containers/<app>/`        |
-| Secret storage                | OCI Vault infrastructure                          | Creating and referencing application secrets        |
-| Logging infrastructure        | Journal, Traefik access logs                      | Application log output and rotation                 |
-| Monitoring infrastructure     | PCP, `pmproxy`, optional Grafana                  | Exposing a loopback `/metrics` endpoint if needed   |
-| OS security                   | SELinux, auditd, firewall                         | `:Z` volume flag, no privileged containers          |
-| Networking                    | Firewall, public port exposure                    | Binding to `127.0.0.1` only                         |
-| VM lifecycle                  | Cloud-init, block volume                          | Nothing                                             |
+| Concern                       | Stack owns                                        | Application owns                                        |
+| ----------------------------- | ------------------------------------------------- | ------------------------------------------------------- |
+| TLS certificates              | Issuance, renewal, termination                    | Nothing                                                 |
+| HTTP routing                  | Domain assignment, middleware chains              | Route config file in `/etc/traefik/config/`             |
+| Global security headers       | HSTS, `X-Frame-Options`, `X-Content-Type-Options` | Content-Security-Policy                                 |
+| Authentication infrastructure | Authelia SSO                                      | Auth integration choice                                 |
+| Authorization                 | Coarse group-based via Authelia                   | Fine-grained RBAC in the application                    |
+| Container lifecycle           | systemd via Quadlet                               | Image, ports, environment, health                       |
+| Persistent storage            | Block volume mount at `/data/`                    | Directory structure under `/data/containers/<app>/`     |
+| Backup                        | Restic covers all of `/data/`                     | Storing data under `/data/containers/<app>/`            |
+| Secret storage                | OCI Vault infrastructure                          | Creating and referencing application secrets            |
+| Logging infrastructure        | Journal, Traefik access logs                      | Application log output and rotation                     |
+| Monitoring infrastructure     | PCP, `pmproxy`, Grafana, OpenMetrics ingestion    | Exposing a loopback `/metrics` endpoint where supported |
+| OS security                   | SELinux, auditd, firewall                         | `:Z` volume flag, no privileged containers              |
+| Networking                    | Firewall, public port exposure                    | Binding to `127.0.0.1` only                             |
+| VM lifecycle                  | Cloud-init, block volume                          | Nothing                                                 |
 
 ## 2. Container runtime
 
@@ -526,7 +526,7 @@ PCP collects host metrics through `pmcd` and exposes them through `pmproxy` on `
 
 The OpenMetrics PMDA collects Traefik metrics from `127.0.0.1:8082`. The stack also creates `/etc/pcp/openmetrics/traefik.url`.
 
-If the application exposes a Prometheus or OpenMetrics endpoint on loopback, add a URL file to the OpenMetrics PMDA. Do not create a Traefik route for the metrics endpoint.
+If the image supports a Prometheus or OpenMetrics endpoint, expose it on `127.0.0.1` and add a URL file to the OpenMetrics PMDA. This endpoint is the primary telemetry for rootless application containers because the Podman PMDA covers rootful containers only. Do not create a Traefik route for the metrics endpoint. If the image does not support metrics, record that limitation and rely on journald and on-demand `podman stats`.
 
 ```bash
 sudo install -d -m 0755 /etc/pcp/openmetrics
