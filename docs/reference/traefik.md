@@ -3,7 +3,7 @@ name: "Traefik Reference"
 description: |
   Exact Traefik static and dynamic configuration, systemd unit, binary update, backup, logging, audit, and SELinux settings for the host.
 status: draft
-version: 1.3
+version: 1.5
 updated: 2026-11-14
 ---
 
@@ -295,7 +295,7 @@ The file must be owned by `traefik:traefik` and mode `0600`. The token must not 
 
 ### 4.1 Tracked deployment script
 
-`infra/host/03-traefik.sh` is the supported install and repair path. It reads `infra/configs/traefik/release.env` and verifies the release archive SHA256 before installing `/usr/local/bin/traefik`. It creates `/data/traefik/letsencrypt` and `/data/logs/traefik`, creates `/etc/traefik/letsencrypt` and `/var/log/traefik` as symlinks to persistent storage, writes `/etc/traefik/env`, installs the unit and logrotate file, opens TCP 80 and 443, and checks `/ping`, `/metrics`, and the HTTP redirect.
+`infra/host/03-traefik.sh` is the supported install and repair path. It reads the architecture, repository, resolved asset name, version, and SHA256 from `infra/manifest.lock.yaml`, rejects a host architecture that does not match the lock, and verifies the release archive SHA256 before installation. The host script does not hardcode the GitHub repository or asset name. `tools/render-config.sh` injects the same locked architecture, repository, asset name, version, and SHA256 into the cloud-init template. The first cloud-init command also checks the target architecture before any host change. The deployment does not create a release metadata file on the target. The version constraint and GitHub release source are in `infra/manifest.yaml` under `components.traefik.version` and `components.traefik.source`. `tools/update-lock.sh` resolves the latest stable release that matches the constraint and refreshes the lock. It creates `/data/traefik/letsencrypt` and `/data/logs/traefik`, creates `/etc/traefik/letsencrypt` and `/var/log/traefik` as symlinks to persistent storage, writes `/etc/traefik/env`, installs the unit and logrotate file, opens TCP 80 and 443, and checks `/ping`, `/metrics`, and the HTTP redirect.
 
 Existing Traefik configuration files under `/etc/traefik` are preserved. The script renders a missing file from `infra/configs/traefik/` and requires `DOMAIN` and `ACME_EMAIL` for that case.
 

@@ -6,7 +6,7 @@
 # They contain real values substituted from the template files.
 #
 # Template files (safe to commit):
-#   cloud-config.example.yaml  ← commit this
+#   cloud-config.template.yaml  ← commit this
 #   .env.example               ← commit this
 #
 # Generated files (never commit):

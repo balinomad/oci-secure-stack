@@ -3,8 +3,8 @@ name: "ADR-004: Persistence and Mount Failure Policy"
 description: |
   Decision to treat the VM root filesystem as disposable, persist state on the data volume, and fail closed when the data mount is invalid.
 status: draft
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # ADR-004: Persistence and Mount Failure Policy
@@ -15,7 +15,7 @@ The VM root filesystem is treated as disposable, but persistent state must survi
 
 ## Affected paths
 
-- `infra/cloud-init/cloud-config.example.yaml:527-539`
+- `infra/cloud-init/cloud-config.template.yaml:527-539`
 - `docs/process/issue-log.md` F2, F3
 
 ## Current text or behavior

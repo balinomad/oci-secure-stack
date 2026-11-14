@@ -38,10 +38,11 @@ All state, including certificates, user accounts, WireGuard keys, and container 
 
 1. Create the OCI network, block volume, Vault secrets, and DNS records. Follow [docs/guides/getting-started.md](docs/guides/getting-started.md).
 2. Copy `.env.example` to `.env` and fill in the required values. Set `MONITORING_PROFILE` to `live`, `history`, or `none`.
-3. Render the deployment file:
+3. Validate the manifest and render the deployment file:
 
    ```bash
    export $(cat .env | xargs)
+   tools/validate-manifest.sh
    tools/render-config.sh \
      | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
      > cloud-config.yaml
@@ -80,24 +81,26 @@ The full security model, threat model, and non-goals are in [docs/architecture.m
 
 ## Repository layout
 
-| Path                                         | Purpose                                                   |
-| -------------------------------------------- | --------------------------------------------------------- |
-| `infra/cloud-init/cloud-config.example.yaml` | Cloud-init template; render before deploying              |
-| `infra/manifest.yaml`                        | Machine-readable source and target mapping                |
-| `infra/config-index.md`                      | Deployment source layout and manifest reference           |
-| `infra/configs/`                             | Declarative component configuration sources               |
-| `infra/runtime/`                             | Executable assets staged into the cloud-init template     |
-| `infra/host/`                                | Host deployment and verification scripts                  |
-| `tools/render-config.sh`                     | Render deployment sources into the cloud-config template  |
-| `.env.example`                               | Variable template; copy to `.env` and fill in values      |
-| `infra/host/03-traefik.sh`                   | Install or repair the Traefik edge router                 |
-| `infra/host/04-authelia.sh`                  | Install or repair the rootless Authelia service           |
-| `infra/host/07-monitoring.sh`                | Install or change the local monitoring profile            |
-| `infra/host/08-alerting.sh`                  | Install or update alert delivery                          |
-| `infra/host/deploy-service.sh`               | Deploy a new Podman container service                     |
-| `infra/host/verify-stack.sh`                 | Post-deployment verification                              |
-| `tools/audit-docs.sh`                        | Audit document front matter, links, and reachability      |
-| `docs/`                                      | Design, decisions, guides, reference, and process records |
+| Path                                          | Purpose                                                   |
+| --------------------------------------------- | --------------------------------------------------------- |
+| `infra/cloud-init/cloud-config.template.yaml` | Cloud-init template; render before deploying              |
+| `infra/manifest.yaml`                         | Component inventory, resolver sources, and target mapping |
+| `infra/manifest.lock.yaml`                    | Resolved versions and SHA256 digests for the target       |
+| `infra/config-index.md`                       | Deployment source layout and manifest reference           |
+| `infra/configs/`                              | Declarative component configuration sources               |
+| `infra/runtime/`                              | Executable assets staged into the cloud-init template     |
+| `infra/host/`                                 | Host deployment and verification scripts                  |
+| `tools/render-config.sh`                      | Render deployment sources into the cloud-config template  |
+| `tools/update-lock.sh`                        | Resolve and refresh the component lock                    |
+| `.env.example`                                | Variable template; copy to `.env` and fill in values      |
+| `infra/host/03-traefik.sh`                    | Install or repair the Traefik edge router                 |
+| `infra/host/04-authelia.sh`                   | Install or repair the rootless Authelia service           |
+| `infra/host/07-monitoring.sh`                 | Install or change the local monitoring profile            |
+| `infra/host/08-alerting.sh`                   | Install or update alert delivery                          |
+| `infra/host/deploy-service.sh`                | Deploy a new Podman container service                     |
+| `infra/host/verify-stack.sh`                  | Post-deployment verification                              |
+| `tools/audit-docs.sh`                         | Audit document front matter, links, and reachability      |
+| `docs/`                                       | Design, decisions, guides, reference, and process records |
 
 ## Contributing
 

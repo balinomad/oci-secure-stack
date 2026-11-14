@@ -3,7 +3,7 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.6
+version: 1.8
 updated: 2026-11-14
 ---
 
@@ -21,14 +21,18 @@ Run these checks locally before rendering or deploying a change.
 
 ```bash
 pip install yamllint
-yamllint infra/cloud-init/cloud-config.example.yaml
+yamllint infra/cloud-init/cloud-config.template.yaml
 ```
 
 `${VARIABLE}` placeholders are valid YAML string content and do not cause errors.
 
 ### 1.2 Render and validate the output
 
-The renderer requires `yq` v4.
+The validator and renderer require `yq` v4. Validate the manifest before rendering:
+
+```bash
+tools/validate-manifest.sh
+```
 
 ```bash
 export $(cat .env | xargs)
@@ -181,7 +185,7 @@ Run the deployment script as root from a repository checkout:
 sudo ./infra/host/03-traefik.sh
 ```
 
-The script is idempotent. It creates or repairs the `traefik` user, `/data/traefik/letsencrypt`, `/data/logs/traefik`, the two persistent-storage symlinks, the environment file, missing configuration, release metadata, systemd unit, and logrotate file. It verifies the release SHA256 before installing the binary, opens TCP 80 and 443, and waits for the loopback health endpoints.
+The script is idempotent. It creates or repairs the `traefik` user, `/data/traefik/letsencrypt`, `/data/logs/traefik`, the two persistent-storage symlinks, the environment file, missing configuration, locked release values from `infra/manifest.lock.yaml`, systemd unit, and logrotate file. It verifies the release SHA256 before installing the binary, opens TCP 80 and 443, and waits for the loopback health endpoints.
 
 Existing Traefik configuration files under `/etc/traefik` are preserved. To replace one, delete it or render it from `infra/configs/traefik` and rerun the script.
 
@@ -222,7 +226,7 @@ The script keeps a timestamped backup beside the runtime file before replacement
 
 For first bootstrap, set `ADMIN_EMAIL` and either `AUTHELIA_ADMIN_PASSWORD` or `AUTHELIA_ADMIN_SECRET_OCID`. When `/etc/authelia/configuration.yml` is absent, also set `DOMAIN` so the script can render the tracked template.
 
-The script stops when `/data` is not mounted, the subordinate ID range differs from `400000:65536`, or the user database is absent and no admin password source is provided.
+The script stops when `/data` is not mounted, the subordinate ID range differs from `400000:65536`, or the user database is absent and no admin password source is provided. It reads the Authelia digest from `infra/manifest.lock.yaml` and writes the `10-image.conf` Quadlet drop-in.
 
 ### 4.3 wg-easy and WireGuard
 
@@ -678,29 +682,25 @@ A new `acme.json` is created on start and certificates are issued within minutes
 
 ## 7. Update Traefik
 
-The manual update path is:
+Use the component lock and the deployment script. Do not download and extract the release archive by hand.
+
+1. Change the Traefik version constraint in `infra/manifest.yaml` when the allowed range changes.
+2. Run `tools/update-lock.sh` from the repository checkout on the management workstation. It resolves every component with a `source` block, including Traefik, and refreshes `infra/manifest.lock.yaml`.
+3. Transfer the updated lock to the host checkout, then run `sudo ./infra/host/03-traefik.sh`.
+4. Confirm the installed version and the loopback health endpoints:
 
 ```bash
-TRAEFIK_VERSION="v3.x.y"
-ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-
-curl -fsSL "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz" \
-  | sudo tar -xz -C /usr/local/bin/ traefik
-
-sudo systemctl restart traefik
 traefik version
+curl -fsS http://127.0.0.1:8080/ping
 ```
 
-The hardened design uses a versioned binary layout under `/opt/traefik/releases` and a `traefik-update` script with checksum verification and rollback. The full unit, script, and release layout are in `docs/reference/traefik.md`.
+The lock carries the resolved source type, repository, asset name, and image repository. The renderer injects those values into cloud-init, and the host scripts read them from the lock. Neither path parses `infra/manifest.yaml`.
 
-Manual rollback:
+To roll back, restore the previous `infra/manifest.lock.yaml` from git and rerun `sudo ./infra/host/03-traefik.sh`.
 
-```bash
-ls -l /opt/traefik/releases
-sudo ln -sfn /opt/traefik/releases/vOLD/traefik /opt/traefik/bin/traefik
-sudo systemctl restart traefik
-sudo systemctl status traefik
-```
+The manifest declares the actual target architecture. If the target architecture changes, update `architecture` in `infra/manifest.yaml`, regenerate the lock, and redeploy. The first cloud-init command stops before host changes when the instance architecture does not match the lock. `infra/host/verify-stack.sh` repeats the check.
+
+The lock records OCI image digests for Authelia and wg-easy. Cloud-init and `infra/host/04-authelia.sh` write Quadlet drop-ins that pin both images by digest. After a lock update, rerun `infra/host/04-authelia.sh` for Authelia. Redeploy the instance or recreate the wg-easy drop-in from the lock for wg-easy.
 
 ## 8. Update the OS, WireGuard, and the kernel
 
@@ -970,7 +970,7 @@ Expected posture:
 
 ## 15. Infrastructure as code
 
-`infra/cloud-init/cloud-config.example.yaml` automates the OS layer. The OCI VCN, subnet, security lists, block volume, Vault, and instance are prerequisites that the template does not create. Terraform can complete the immutable infrastructure picture.
+`infra/cloud-init/cloud-config.template.yaml` automates the OS layer. The OCI VCN, subnet, security lists, block volume, Vault, and instance are prerequisites that the template does not create. Terraform can complete the immutable infrastructure picture.
 
 A minimal layout:
 

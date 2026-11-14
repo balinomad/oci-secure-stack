@@ -3,7 +3,7 @@ name: "Getting Started"
 description: |
   End-to-end tutorial for provisioning the OCI secure stack from a clean Oracle Cloud Infrastructure environment.
 status: draft
-version: 1.4
+version: 1.6
 updated: 2026-11-14
 ---
 
@@ -56,18 +56,18 @@ Do not expose the Traefik dashboard, raw metrics, `pmproxy`, Grafana, Valkey, Co
 
 The template uses `${VARIABLE}` syntax for site-specific values. All other `${...}` references inside `runcmd` blocks are shell variables and must remain unsubstituted.
 
-| Variable              | Description                                             | Example                       |
-| --------------------- | ------------------------------------------------------- | ----------------------------- |
-| `${DOMAIN}`           | Base domain for all subdomains                          | `example.com`                 |
-| `${ACME_EMAIL}`       | Email for Let's Encrypt expiry notices                  | `ops@example.com`             |
-| `${ADMIN_EMAIL}`      | Authelia admin user email                               | `admin@example.com`           |
-| `${CF_SECRET_OCID}`   | OCID of the Cloudflare token secret in OCI Vault        | `ocid1.vaultsecret.oc1..xxxx` |
-| `${AUTH_SECRET_OCID}` | OCID of the Authelia admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..yyyy` |
-| `${WG_SECRET_OCID}`   | OCID of the wg-easy admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..zzzz` |
-| `${GRAFANA_SECRET_OCID}` | OCID of the Grafana admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..gggg` |
-| `${ALERT_WEBHOOK_SECRET_OCID}` | OCID of the alert webhook secret in OCI Vault | `ocid1.vaultsecret.oc1..aaaa` |
-| `${ALERT_HEARTBEAT_SECRET_OCID}` | OCID of the alert heartbeat secret in OCI Vault | `ocid1.vaultsecret.oc1..bbbb` |
-| `${MONITORING_PROFILE}` | Monitoring profile: `live`, `history`, or `none`        | `live`                        |
+| Variable                         | Description                                             | Example                       |
+| -------------------------------- | ------------------------------------------------------- | ----------------------------- |
+| `${DOMAIN}`                      | Base domain for all subdomains                          | `example.com`                 |
+| `${ACME_EMAIL}`                  | Email for Let's Encrypt expiry notices                  | `ops@example.com`             |
+| `${ADMIN_EMAIL}`                 | Authelia admin user email                               | `admin@example.com`           |
+| `${CF_SECRET_OCID}`              | OCID of the Cloudflare token secret in OCI Vault        | `ocid1.vaultsecret.oc1..xxxx` |
+| `${AUTH_SECRET_OCID}`            | OCID of the Authelia admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..yyyy` |
+| `${WG_SECRET_OCID}`              | OCID of the wg-easy admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..zzzz` |
+| `${GRAFANA_SECRET_OCID}`         | OCID of the Grafana admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..gggg` |
+| `${ALERT_WEBHOOK_SECRET_OCID}`   | OCID of the alert webhook secret in OCI Vault           | `ocid1.vaultsecret.oc1..aaaa` |
+| `${ALERT_HEARTBEAT_SECRET_OCID}` | OCID of the alert heartbeat secret in OCI Vault         | `ocid1.vaultsecret.oc1..bbbb` |
+| `${MONITORING_PROFILE}`          | Monitoring profile: `live`, `history`, or `none`        | `live`                        |
 
 `${GRAFANA_SECRET_OCID}` is required when `${MONITORING_PROFILE}` is `live` or `history`. The alert secret OCIDs are required in every profile.
 
@@ -210,11 +210,12 @@ A wildcard record means new application services resolve without adding individu
 
 ## 6. Render the deployment file
 
-Create `.env` as described in section 3. Render the component configuration into the cloud-config template, then substitute only the ten template variables. The renderer requires `yq` v4. Pass only the ten variables to `envsubst` so shell variables inside `runcmd` remain intact.
+Create `.env` as described in section 3. Set `architecture` in `infra/manifest.yaml` to `amd64` or `arm64` to match the instance shape. If the architecture changes, run `tools/update-lock.sh` before rendering. The first cloud-init command checks the instance architecture and stops before host changes when it does not match. Render the component configuration into the cloud-config template, then substitute only the ten template variables. The validator and renderer require `yq` v4. Pass only the ten variables to `envsubst` so shell variables inside `runcmd` remain intact.
 
 ```bash
 export $(cat .env | xargs)
 
+tools/validate-manifest.sh
 tools/render-config.sh \
   | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
   > cloud-config.yaml

@@ -3,7 +3,7 @@ name: "Adding Applications"
 description: |
   How to build, deploy, route, secure, and persist an application container in the OCI secure stack.
 status: draft
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -409,7 +409,7 @@ Each container's data lives under the same parent directory:
 
 ### 8.2 Fetch at boot
 
-Add a `runcmd` block to `infra/cloud-init/cloud-config.example.yaml` that fetches the secret and writes the application environment file:
+Add a `runcmd` block to `infra/cloud-init/cloud-config.template.yaml` that fetches the secret and writes the application environment file:
 
 ```bash
 APP_SECRET=$(oci secrets secret-bundle get \
@@ -465,7 +465,7 @@ For file-based logs, create `/etc/logrotate.d/<app-name>`:
 }
 ```
 
-Add this to the `write_files` section of `infra/cloud-init/cloud-config.example.yaml`.
+Add this to the `write_files` section of `infra/cloud-init/cloud-config.template.yaml`.
 
 ## 10. Backup
 
@@ -574,13 +574,13 @@ On VM replacement, cloud-init re-provisions the OS. Application-specific Quadlet
 
 ### 14.1 Strategy A: add the application to cloud-config
 
-Add the directory creation, environment file, Quadlet unit, and Traefik config to the `write_files` and `runcmd` sections. Edit `infra/cloud-init/cloud-config.example.yaml`. The application then becomes part of the immutable infrastructure definition and starts on every new instance.
+Add the directory creation, environment file, Quadlet unit, and Traefik config to the `write_files` and `runcmd` sections. Edit `infra/cloud-init/cloud-config.template.yaml`. The application then becomes part of the immutable infrastructure definition and starts on every new instance.
 
 Use this for applications that are permanent parts of the stack.
 
 ### 14.2 Strategy B: application manifests
 
-Applications register themselves by saving a deployment manifest to `/data/apps/`. On VM replacement, cloud-init executes all manifests and reconstructs the applications without changing `infra/cloud-init/cloud-config.example.yaml`.
+Applications register themselves by saving a deployment manifest to `/data/apps/`. On VM replacement, cloud-init executes all manifests and reconstructs the applications without changing `infra/cloud-init/cloud-config.template.yaml`.
 
 ```text
 /data/apps/

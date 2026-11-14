@@ -3,7 +3,7 @@ name: "Authelia Reference"
 description: |
   Exact Authelia runtime, authentication, storage, session, secret, and access-control configuration, including the conditions for adding Valkey session storage.
 status: draft
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -15,16 +15,18 @@ This page documents this stack's Authelia installation and configuration. It is 
 
 Authelia runs as a rootless Podman Quadlet user unit under the dedicated `authelia` user. The unit is installed at `/etc/containers/systemd/users/<authelia-uid>/authelia.container`. The source unit is `infra/configs/podman/authelia.container`.
 
-| Property       | Value                                     |
-| -------------- | ----------------------------------------- |
-| Image          | `authelia/authelia:4.39`                  |
-| Published port | `127.0.0.1:9091`                          |
-| Configuration  | `/data/authelia/config/configuration.yml` |
-| Database       | `/data/authelia/db/authelia.sqlite3`      |
-| Environment    | `/data/authelia/env`                      |
-| Data volume    | `/data/authelia`                          |
+| Property       | Value                                                                          |
+| -------------- | ------------------------------------------------------------------------------ |
+| Image          | `authelia/authelia` pinned by version and digest in `infra/manifest.lock.yaml` |
+| Published port | `127.0.0.1:9091`                                                               |
+| Configuration  | `/data/authelia/config/configuration.yml`                                      |
+| Database       | `/data/authelia/db/authelia.sqlite3`                                           |
+| Environment    | `/data/authelia/env`                                                           |
+| Data volume    | `/data/authelia`                                                               |
 
 The unit uses `UserNS=keep-id`, `NoNewPrivileges=true`, and `ReadOnly=true`. It waits for the `/data` mount before it starts. The rootless user unit cannot order after `local-fs.target`, so the wait is an `ExecStartPre` loop.
+
+The deployment writes a `10-image.conf` drop-in under `authelia.container.d`. The drop-in overrides the base unit tag with the locked digest. `infra/host/04-authelia.sh` writes the same drop-in on repair.
 
 ## 2. Configuration source
 
@@ -146,7 +148,7 @@ Valkey adds these operational costs:
 
 ## 9. Deployment and repair
 
-`infra/host/04-authelia.sh` installs or repairs the rootless service. Run it as root from a repository checkout:
+`infra/host/04-authelia.sh` installs or repairs the rootless service. It reads the image repository, version, and digest from `infra/manifest.lock.yaml`. Run it as root from a repository checkout:
 
 ```bash
 sudo ./infra/host/04-authelia.sh

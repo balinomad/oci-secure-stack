@@ -3,7 +3,7 @@ name: "Infrastructure Reference"
 description: |
   Exact template variables, OCI network rules, DNS records, Vault secrets, persistent storage layout, and reserved ports for the stack.
 status: draft
-version: 1.4
+version: 1.5
 updated: 2026-11-14
 ---
 
@@ -13,7 +13,7 @@ This page documents the OCI infrastructure and host baseline for the stack. See 
 
 ## 1. Template variables
 
-`infra/cloud-init/cloud-config.example.yaml` uses `${VARIABLE}` syntax for site-specific values. All other `${...}` references inside `runcmd` blocks are shell variables and must remain unsubstituted.
+`infra/cloud-init/cloud-config.template.yaml` uses `${VARIABLE}` syntax for site-specific values. All other `${...}` references inside `runcmd` blocks are shell variables and must remain unsubstituted.
 
 | Variable                         | Description                                             | Example                       |
 | -------------------------------- | ------------------------------------------------------- | ----------------------------- |

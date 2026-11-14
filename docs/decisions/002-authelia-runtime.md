@@ -3,8 +3,8 @@ name: "ADR-002: Authelia Runtime and File Ownership"
 description: |
   Decision to run Authelia as a rootless Podman container under a dedicated user with persistent state on the data volume.
 status: draft
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # ADR-002: Authelia Runtime and File Ownership
@@ -15,7 +15,7 @@ Authelia holds session keys, TOTP secrets, and the user database. Running it as 
 
 ## Affected paths
 
-- `infra/cloud-init/cloud-config.example.yaml:426-485`
+- `infra/cloud-init/cloud-config.template.yaml:426-485`
 - `docs/process/issue-log.md` F1, F10
 
 ## Current text or behavior

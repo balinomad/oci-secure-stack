@@ -3,7 +3,7 @@ name: "ADR-011: Alert Delivery"
 description: |
   Decision to deliver local alerts through PCP pmie, systemd failure hooks, an HTTPS webhook, and an external heartbeat.
 status: draft
-version: 1.1
+version: 1.2
 updated: 2026-11-14
 ---
 
@@ -41,8 +41,8 @@ PCP is already installed and provides `pmie` for local threshold evaluation. sys
 - `infra/configs/systemd/valkey.service.d/onfailure.conf`
 - `infra/manifest.yaml`
 - `infra/config-index.md`
-- `infra/configs/oci-vault/secrets.yaml`
-- `infra/cloud-init/cloud-config.example.yaml` sections `USERS & GROUPS`, `PACKAGES`, `runcmd`, and `Start Services`
+- `infra/configs/oci-vault/secret-inventory.yaml`
+- `infra/cloud-init/cloud-config.template.yaml` sections `USERS & GROUPS`, `PACKAGES`, `runcmd`, and `Start Services`
 - `infra/host/08-alerting.sh`
 - `infra/host/verify-stack.sh`
 - `.env.example`

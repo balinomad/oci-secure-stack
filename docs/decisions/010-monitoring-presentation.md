@@ -3,7 +3,7 @@ name: "ADR-010: Local Monitoring UI and Historical Retention"
 description: |
   Decision to provide a loopback-only Grafana UI over PCP metrics, with an optional Valkey history profile.
 status: draft
-version: 1.2
+version: 1.3
 updated: 2026-11-14
 ---
 
@@ -19,7 +19,7 @@ PCP can store history in Valkey or Redis through `pmproxy`. That storage adds me
 
 ## Affected paths
 
-- `infra/cloud-init/cloud-config.example.yaml` sections `PACKAGES`, `runcmd`, and `Start Services`
+- `infra/cloud-init/cloud-config.template.yaml` sections `PACKAGES`, `runcmd`, and `Start Services`
 - `infra/manifest.yaml`
 - `infra/configs/pcp/`
 - `infra/configs/grafana/`
