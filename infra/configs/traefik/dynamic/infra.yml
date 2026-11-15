@@ -8,6 +8,7 @@ http:
       service: authelia-svc
       middlewares:
         - wg-allowlist
+        - global-security-headers
       tls:
         certResolver: cloudflare
 
@@ -26,6 +27,19 @@ http:
       service: wg-easy-svc
       middlewares:
         - admin-chain
+        - global-security-headers
+      tls:
+        certResolver: cloudflare
+
+    # Cockpit host console, VPN + Authelia 2FA
+    cockpit:
+      rule: "Host(`cockpit.${DOMAIN}`)"
+      entryPoints:
+        - websecure
+      service: cockpit-svc
+      middlewares:
+        - admin-chain
+        - global-security-headers
       tls:
         certResolver: cloudflare
 
@@ -39,6 +53,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://127.0.0.1:51821"
+
+    cockpit-svc:
+      loadBalancer:
+        passHostHeader: true   # Required for Cockpit WebSocket support
+        servers:
+          - url: "http://127.0.0.1:9090"
 
   middlewares:
     # IP allowlist: only WireGuard VPN subnet permitted

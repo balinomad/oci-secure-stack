@@ -212,10 +212,6 @@ components:
         target: /etc/traefik/config/infra.yaml
         owner: traefik:traefik
         mode: "0644"
-      - source: infra/configs/traefik/dynamic/cockpit.yml
-        target: /etc/traefik/config/cockpit.yaml
-        owner: traefik:traefik
-        mode: "0644"
       - source: infra/configs/traefik/logrotate.conf
         target: /etc/logrotate.d/traefik
         owner: root:root

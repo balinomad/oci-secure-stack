@@ -593,6 +593,72 @@ for legacy in \
 done
 
 # --------------------------------------------------------------
+# 4.4 Security Headers
+# --------------------------------------------------------------
+header "4.4 Security Headers"
+
+TRAEFIK_DYNAMIC_DIR="/etc/traefik/config"
+TRAEFIK_COMBINED_ROUTE="${TRAEFIK_DYNAMIC_DIR}/infra.yaml"
+
+check_security_headers() {
+  local host="$1"
+  local headers
+
+  if [[ -z "$host" ]]; then
+    fail "Security header check has no host"
+    return
+  fi
+
+  headers="$(curl -sS -D - -o /dev/null --max-time 5 --resolve "${host}:443:127.0.0.1" "https://${host}" 2>/dev/null || true)"
+
+  if [[ -z "$headers" ]]; then
+    fail "No HTTPS response for ${host}"
+    return
+  fi
+
+  if grep -qi '^Strict-Transport-Security:' <<< "$headers"; then
+    pass "HSTS header is present for ${host}"
+  else
+    fail "HSTS header is missing for ${host}"
+  fi
+
+  if grep -qi '^X-Content-Type-Options:' <<< "$headers"; then
+    pass "X-Content-Type-Options header is present for ${host}"
+  else
+    fail "X-Content-Type-Options header is missing for ${host}"
+  fi
+
+  if grep -qi '^X-Frame-Options:' <<< "$headers"; then
+    pass "X-Frame-Options header is present for ${host}"
+  else
+    fail "X-Frame-Options header is missing for ${host}"
+  fi
+}
+
+AUTH_HOST="$(awk -F'`' '/Host\(`auth\./ {print $2; exit}' "${TRAEFIK_COMBINED_ROUTE}" 2>/dev/null)"
+WG_HOST="$(awk -F'`' '/Host\(`wg\./ {print $2; exit}' "${TRAEFIK_COMBINED_ROUTE}" 2>/dev/null)"
+COCKPIT_HOST="$(awk -F'`' '/Host\(`cockpit\./ {print $2; exit}' "${TRAEFIK_COMBINED_ROUTE}" 2>/dev/null)"
+
+for host in "$AUTH_HOST" "$WG_HOST" "$COCKPIT_HOST"; do
+  check_security_headers "$host"
+done
+
+if [[ -f "$TRAEFIK_COMBINED_ROUTE" ]] && grep -q 'global-security-headers' "$TRAEFIK_COMBINED_ROUTE"; then
+  pass "Security headers middleware is attached in ${TRAEFIK_COMBINED_ROUTE}"
+else
+  fail "Security headers middleware is missing in ${TRAEFIK_COMBINED_ROUTE}"
+fi
+
+for route_file in "${TRAEFIK_DYNAMIC_DIR}"/*.yaml; do
+  if [[ "$route_file" == "$TRAEFIK_COMBINED_ROUTE" ]]; then
+    continue
+  fi
+  if [[ -e "$route_file" ]] && ! grep -q 'global-security-headers' "$route_file"; then
+    fail "Security headers middleware is missing in ${route_file}"
+  fi
+done
+
+# --------------------------------------------------------------
 # 5. TLS Certificate Issuance
 # --------------------------------------------------------------
 header "5. TLS Certificates (acme.json)"

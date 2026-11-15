@@ -183,8 +183,7 @@ ensure_config() {
   local missing=0
   local file
 
-  for file in "${TRAEFIK_CONFIG}" "${TRAEFIK_DYNAMIC_DIR}/infra.yaml" \
-    "${TRAEFIK_DYNAMIC_DIR}/cockpit.yaml"; do
+  for file in "${TRAEFIK_CONFIG}" "${TRAEFIK_DYNAMIC_DIR}/infra.yaml"; do
     if [[ ! -f "${file}" ]]; then
       missing=1
     fi
@@ -201,11 +200,8 @@ ensure_config() {
     "${TRAEFIK_CONFIG}"
   render_if_missing "${REPO_ROOT}/infra/configs/traefik/dynamic/infra.yml" \
     "${TRAEFIK_DYNAMIC_DIR}/infra.yaml"
-  render_if_missing "${REPO_ROOT}/infra/configs/traefik/dynamic/cockpit.yml" \
-    "${TRAEFIK_DYNAMIC_DIR}/cockpit.yaml"
 
-  for file in "${TRAEFIK_CONFIG}" "${TRAEFIK_DYNAMIC_DIR}/infra.yaml" \
-    "${TRAEFIK_DYNAMIC_DIR}/cockpit.yaml"; do
+  for file in "${TRAEFIK_CONFIG}" "${TRAEFIK_DYNAMIC_DIR}/infra.yaml"; do
     if grep -q "\${" "${file}"; then
       err "${file} contains an unrendered placeholder"
       exit 1

@@ -194,9 +194,11 @@ WantedBy=multi-user.target"
 # Traefik route file
 if [[ "$ADMIN" == true ]]; then
   MIDDLEWARE_BLOCK="      middlewares:
-        - admin-chain   # VPN (ipAllowList) + Authelia forwardAuth"
+        - admin-chain   # VPN (ipAllowList) + Authelia forwardAuth
+        - global-security-headers"
 else
-  MIDDLEWARE_BLOCK="      # No middleware — public service"
+  MIDDLEWARE_BLOCK="      middlewares:
+        - global-security-headers"
 fi
 
 TRAEFIK_CONTENT="http:

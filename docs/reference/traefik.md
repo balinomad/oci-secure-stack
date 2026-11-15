@@ -143,7 +143,7 @@ tls:
 
 Do not define a global CSP here. CSP is application-specific.
 
-The current implementation defines `global-security-headers` but does not attach it to the routers. Finding F7 records that defect.
+The static configuration attaches `global-security-headers` to the `authelia`, `wg-easy`, and `cockpit` routers, and to generated application routes. Finding F7 records the static change. The runtime header behavior is unproven until a deployment test.
 
 The Authelia portal is reachable only from the VPN subnet and does not use `forwardAuth`, which avoids a circular redirect:
 
