@@ -209,7 +209,6 @@ runcmd:
       /data/containers/wg-easy \
       /data/monitoring/grafana \
       /data/monitoring/valkey \
-      /data/monitoring/alerting \
       /data/apps \
       /etc/containers/systemd   # Quadlet unit files for app containers
 
@@ -289,82 +288,66 @@ runcmd:
   # Fetch Secrets from OCI Vault (Instance Principal auth)
   # -----------------------------------------------------------
   - |
+    set -e
+
     dnf install -y oci-cli
 
-    CF_TOKEN=$(oci secrets secret-bundle get \
-      --secret-id ${CF_SECRET_OCID} \
-      --query "data.secretBundleContent.content" \
-      --raw-output | base64 -d)
-
-    AUTHELIA_ADMIN_PASS=$(oci secrets secret-bundle get \
-      --secret-id ${AUTH_SECRET_OCID} \
-      --query "data.secretBundleContent.content" \
-      --raw-output | base64 -d)
-
-    WG_ADMIN_PASS=$(oci secrets secret-bundle get \
-      --secret-id ${WG_SECRET_OCID} \
-      --query "data.secretBundleContent.content" \
-      --raw-output | base64 -d)
-
-    if [ "${MONITORING_PROFILE}" != "none" ]; then
-      if [ -z "${GRAFANA_SECRET_OCID}" ]; then
-        echo "ERROR: GRAFANA_SECRET_OCID is required for the ${MONITORING_PROFILE} profile" >&2
-        exit 1
-      fi
-      GRAFANA_ADMIN_PASS=$(oci secrets secret-bundle get \
-        --secret-id "${GRAFANA_SECRET_OCID}" \
-        --query "data.secretBundleContent.content" \
-        --raw-output | base64 -d)
-      printf 'GF_SECURITY_ADMIN_PASSWORD=%s\n' "$GRAFANA_ADMIN_PASS" \
-        > /run/grafana-bootstrap.tmp
-      chmod 600 /run/grafana-bootstrap.tmp
+    if [ -z "${CF_SECRET_OCID}" ]; then
+      echo "ERROR: CF_SECRET_OCID is required" >&2
+      exit 1
     fi
-
+    if [ -z "${AUTH_SECRET_OCID}" ]; then
+      echo "ERROR: AUTH_SECRET_OCID is required" >&2
+      exit 1
+    fi
+    if [ -z "${WG_SECRET_OCID}" ]; then
+      echo "ERROR: WG_SECRET_OCID is required" >&2
+      exit 1
+    fi
     if [ -z "${ALERT_WEBHOOK_SECRET_OCID}" ] || [ -z "${ALERT_HEARTBEAT_SECRET_OCID}" ]; then
       echo "ERROR: ALERT_WEBHOOK_SECRET_OCID and ALERT_HEARTBEAT_SECRET_OCID are required" >&2
       exit 1
     fi
+    if [ "${MONITORING_PROFILE}" != "none" ] && [ -z "${GRAFANA_SECRET_OCID}" ]; then
+      echo "ERROR: GRAFANA_SECRET_OCID is required for the ${MONITORING_PROFILE} profile" >&2
+      exit 1
+    fi
 
-    ALERT_WEBHOOK_URL=$(oci secrets secret-bundle get \
-      --secret-id "${ALERT_WEBHOOK_SECRET_OCID}" \
+    AUTHELIA_ADMIN_PASS=$(OCI_CLI_AUTH=instance_principal oci secrets secret-bundle get \
+      --secret-id "${AUTH_SECRET_OCID}" \
       --query "data.secretBundleContent.content" \
       --raw-output | base64 -d)
-    ALERT_HEARTBEAT_URL=$(oci secrets secret-bundle get \
-      --secret-id "${ALERT_HEARTBEAT_SECRET_OCID}" \
+    WG_ADMIN_PASS=$(OCI_CLI_AUTH=instance_principal oci secrets secret-bundle get \
+      --secret-id "${WG_SECRET_OCID}" \
       --query "data.secretBundleContent.content" \
       --raw-output | base64 -d)
 
-    case "${ALERT_WEBHOOK_URL}" in
-      https://*) ;;
-      *)
-        echo "ERROR: alert-webhook-url must use HTTPS" >&2
-        exit 1
-        ;;
-    esac
+    if [ -z "${AUTHELIA_ADMIN_PASS}" ]; then
+      echo "ERROR: the Authelia admin password secret is empty" >&2
+      exit 1
+    fi
+    if [ -z "${WG_ADMIN_PASS}" ]; then
+      echo "ERROR: the wg-easy admin password secret is empty" >&2
+      exit 1
+    fi
 
-    case "${ALERT_HEARTBEAT_URL}" in
-      https://*) ;;
-      *)
-        echo "ERROR: alert-heartbeat-url must use HTTPS" >&2
-        exit 1
-        ;;
-    esac
-
-    install -d -m 0750 -o alerting -g alerting /data/monitoring/alerting
+    install -d -m 0700 -o root -g root /etc/secure-stack/secret-refs
     umask 077
-    {
-      printf 'ALERT_WEBHOOK_URL=%q\n' "${ALERT_WEBHOOK_URL}"
-      printf 'ALERT_HEARTBEAT_URL=%q\n' "${ALERT_HEARTBEAT_URL}"
-    } > /data/monitoring/alerting/env
-    chown alerting:alerting /data/monitoring/alerting/env
-    chmod 0600 /data/monitoring/alerting/env
-
-    echo "CF_DNS_API_TOKEN=$CF_TOKEN" > /etc/traefik/env
-    chown traefik:traefik /etc/traefik/env
-    chmod 600 /etc/traefik/env
+    printf 'CF_DNS_API_TOKEN=%s\n' "${CF_SECRET_OCID}" \
+      > /etc/secure-stack/secret-refs/traefik.env
+    printf 'ALERT_WEBHOOK_URL=%s\n' "${ALERT_WEBHOOK_SECRET_OCID}" \
+      > /etc/secure-stack/secret-refs/alerting.env
+    printf 'ALERT_HEARTBEAT_URL=%s\n' "${ALERT_HEARTBEAT_SECRET_OCID}" \
+      >> /etc/secure-stack/secret-refs/alerting.env
+    if [ "${MONITORING_PROFILE}" != "none" ]; then
+      printf 'GF_SECURITY_ADMIN_PASSWORD=%s\n' "${GRAFANA_SECRET_OCID}" \
+        > /etc/secure-stack/secret-refs/grafana.env
+    fi
+    chown root:root /etc/secure-stack/secret-refs/*.env
+    chmod 0600 /etc/secure-stack/secret-refs/*.env
 
     # Write passwords to ephemeral tmpfs for use in bootstrap blocks below.
-    # /run is in-memory only — never touches disk or block volume.
+    # /run is in-memory only; it never touches the boot or block volume.
     echo "$AUTHELIA_ADMIN_PASS" > /run/authelia-bootstrap.tmp
     chmod 600 /run/authelia-bootstrap.tmp
     echo "$WG_ADMIN_PASS" > /run/wg-bootstrap.tmp
@@ -387,8 +370,11 @@ runcmd:
     systemctl enable --now pmie.service 2>/dev/null || true
 
     install -d -m 0750 -o alerting -g alerting /var/lib/stack-alerting
-    systemd-tmpfiles --create /etc/tmpfiles.d/pcp-alerting.conf
+    systemd-tmpfiles --create /etc/tmpfiles.d/stack-secrets.conf \
+      /etc/tmpfiles.d/pcp-alerting.conf
     systemctl daemon-reload
+    systemctl enable stack-secrets-alerting.service
+    systemctl restart stack-secrets-alerting.service
     if ! runuser -u alerting -- pmie -C -c /etc/pcp/pmie/stack-alerts.pmie; then
       echo "ERROR: pmie rejected /etc/pcp/pmie/stack-alerts.pmie" >&2
       exit 1
@@ -404,12 +390,9 @@ runcmd:
     if [ "${MONITORING_PROFILE}" != "none" ]; then
       dnf install -y grafana grafana-pcp
       install -d -m 0750 -o grafana -g grafana /data/monitoring/grafana
-      if [ ! -f /data/monitoring/grafana/env ]; then
-        install -m 0600 -o grafana -g grafana \
-          /run/grafana-bootstrap.tmp /data/monitoring/grafana/env
-      fi
-      rm -f /run/grafana-bootstrap.tmp
       systemctl daemon-reload
+      systemctl enable stack-secrets-grafana.service
+      systemctl restart stack-secrets-grafana.service
       systemctl enable --now grafana-server.service
     fi
 
@@ -635,8 +618,13 @@ runcmd:
   # -----------------------------------------------------------
   # Start Services
   # -----------------------------------------------------------
-  - systemctl daemon-reload
-  - systemctl enable --now cockpit.socket traefik.service pmcd.service pmlogger.service pmproxy.service
+  - |
+    set -e
+    systemctl daemon-reload
+    systemd-tmpfiles --create /etc/tmpfiles.d/stack-secrets.conf
+    systemctl enable stack-secrets-traefik.service
+    systemctl restart stack-secrets-traefik.service
+    systemctl enable --now cockpit.socket traefik.service pmcd.service pmlogger.service pmproxy.service
   - systemctl enable --now pmie.service 2>/dev/null || true
   - systemctl enable --now pcp-alert-pmie.service pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
   - systemctl restart cockpit.socket

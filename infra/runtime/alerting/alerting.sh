@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly ENV_FILE="/data/monitoring/alerting/env"
+readonly ENV_FILE="/run/monitoring/alerting/env"
 readonly SERVICES_FILE="/etc/pcp/alerting/services.list"
 readonly STATE_DIR="/var/lib/stack-alerting/state"
 readonly ACME_FILE="/data/traefik/letsencrypt/acme.json"
@@ -20,7 +20,7 @@ Commands:
   heartbeat                     Send the external heartbeat.
   test                          Send a test alert.
 
-The runtime secrets come from /data/monitoring/alerting/env.
+The runtime secrets come from /run/monitoring/alerting/env.
 USAGE
 }
 
@@ -29,15 +29,29 @@ err() {
 }
 
 load_env() {
+  local key
+  local value
+
+  ALERT_WEBHOOK_URL=""
+  ALERT_HEARTBEAT_URL=""
+
   if [[ ! -r "${ENV_FILE}" ]]; then
     err "cannot read ${ENV_FILE}"
     exit 1
   fi
 
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
+  while IFS='=' read -r key value || [[ -n "${key}" ]]; do
+    case "${key}" in
+      ALERT_WEBHOOK_URL)
+        ALERT_WEBHOOK_URL="${value}"
+        ;;
+      ALERT_HEARTBEAT_URL)
+        ALERT_HEARTBEAT_URL="${value}"
+        ;;
+    esac
+  done < "${ENV_FILE}"
 
-  if [[ -z "${ALERT_WEBHOOK_URL:-}" ]]; then
+  if [[ -z "${ALERT_WEBHOOK_URL}" ]]; then
     err "ALERT_WEBHOOK_URL is not set"
     exit 1
   fi

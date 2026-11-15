@@ -1,8 +1,8 @@
 [Unit]
 Description=PCP pmie alert rules
-After=pmcd.service network-online.target
+After=pmcd.service network-online.target stack-secrets-alerting.service
 Wants=network-online.target
-Requires=pmcd.service
+Requires=pmcd.service stack-secrets-alerting.service
 OnFailure=pcp-alert-notify@%n.service
 
 [Service]

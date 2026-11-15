@@ -19,21 +19,21 @@ Configurations are grouped by component. Each component keeps its native format.
 
 The `infra/configs/` tree contains declarative configuration. The renderer writes every `files` entry into the cloud-config template.
 
-| Directory                   | Contents                                                                                 | Status    |
-| --------------------------- | ---------------------------------------------------------------------------------------- | --------- |
-| `infra/configs/alerting/`   | Alerting service check list and environment template                                     | Active    |
-| `infra/configs/authelia/`   | Authelia configuration and environment template                                          | Active    |
-| `infra/configs/cockpit/`    | Cockpit web service configuration                                                        | Active    |
-| `infra/configs/grafana/`    | Grafana configuration, provisioning, dashboard, and environment template                 | Active    |
-| `infra/configs/oci-vault/`  | OCI Vault policy draft and secret inventory                                              | Reference |
-| `infra/configs/pcp/`        | PCP pmproxy, OpenMetrics, and pmie alerting configuration                                | Active    |
-| `infra/configs/podman/`     | Podman Quadlet units for Authelia and wg-easy                                            | Active    |
-| `infra/configs/prometheus/` | Reserved Prometheus configuration                                                        | Disabled  |
-| `infra/configs/systemd/`    | Host systemd units and drop-ins                                                          | Active    |
-| `infra/configs/traefik/`    | Traefik static configuration, dynamic configuration, logrotate, and environment template | Active    |
-| `infra/configs/valkey/`     | Valkey loopback and persistence configuration                                            | Active    |
-| `infra/configs/wg-easy/`    | wg-easy reference configuration and environment template                                 | Active    |
-| `infra/configs/wireguard/`  | WireGuard kernel module load file                                                        | Active    |
+| Directory                   | Contents                                                                                      | Status    |
+| --------------------------- | --------------------------------------------------------------------------------------------- | --------- |
+| `infra/configs/alerting/`   | Alerting service check list and runtime environment reference                                 | Active    |
+| `infra/configs/authelia/`   | Authelia configuration and environment template                                               | Active    |
+| `infra/configs/cockpit/`    | Cockpit web service configuration                                                             | Active    |
+| `infra/configs/grafana/`    | Grafana configuration, provisioning, dashboard, and runtime environment reference             | Active    |
+| `infra/configs/oci-vault/`  | OCI Vault policy draft and secret inventory                                                   | Reference |
+| `infra/configs/pcp/`        | PCP pmproxy, OpenMetrics, and pmie alerting configuration                                     | Active    |
+| `infra/configs/podman/`     | Podman Quadlet units for Authelia and wg-easy                                                 | Active    |
+| `infra/configs/prometheus/` | Reserved Prometheus configuration                                                             | Disabled  |
+| `infra/configs/systemd/`    | Host systemd units and drop-ins                                                               | Active    |
+| `infra/configs/traefik/`    | Traefik static configuration, dynamic configuration, logrotate, and secret reference template | Active    |
+| `infra/configs/valkey/`     | Valkey loopback and persistence configuration                                                 | Active    |
+| `infra/configs/wg-easy/`    | wg-easy reference configuration and environment template                                      | Active    |
+| `infra/configs/wireguard/`  | WireGuard kernel module load file                                                             | Active    |
 
 The `infra/runtime/` tree contains executable assets that the renderer writes. Executable sources must stay under `infra/runtime/`. Do not place executable files under `infra/configs/`.
 
@@ -88,30 +88,31 @@ Each `files` entry has these fields:
 
 Each `secrets` entry has these fields:
 
-| Field    | Meaning                                           |
-| -------- | ------------------------------------------------- |
-| `target` | Absolute host path for the runtime-generated file |
-| `owner`  | Host owner and group                              |
-| `mode`   | Four-digit octal file mode                        |
-| `keys`   | Required environment key names, never values      |
+| Field       | Meaning                                                                                      |
+| ----------- | -------------------------------------------------------------------------------------------- |
+| `target`    | Absolute host path for the runtime-generated file                                            |
+| `owner`     | Host owner and group                                                                         |
+| `mode`      | Four-digit octal file mode                                                                   |
+| `reference` | Optional absolute path of the OCID-only reference file below `/etc/secure-stack/secret-refs` |
+| `keys`      | Required environment key names, never values                                                 |
 
-The manifest does not contain secret values.
+A `secrets` entry with a `reference` field names the file that contains OCI Vault secret OCIDs only. The helper `infra/runtime/secrets/materialize.sh` reads the reference file and writes the runtime value file under `/run`. The manifest does not contain secret values.
 
 `infra/manifest.lock.yaml` is the generated component lock. It records the manifest architecture, exact versions, SHA256 digests, and resolved source metadata. `tools/update-lock.sh` is the single generic resolver. It reads the `source` blocks from the manifest and writes the lock. Only components with a `source` block are locked. Do not edit the lock by hand. The renderer injects the target architecture into the first cloud-init command. That preflight stops the deployment before host changes when the instance architecture does not match. The renderer also injects the locked Traefik architecture, repository, asset name, version, and SHA256 into the Traefik release block. It writes `/etc/secure-stack/images.env` from the OCI lock entries. Cloud-init and `infra/host/04-authelia.sh` use those values in Quadlet drop-ins that pin Authelia and wg-easy by digest. `infra/host/03-traefik.sh` and `infra/host/verify-stack.sh` read the lock and reject a host architecture that does not match it. The deployment writes no release metadata file to the host.
 
 ## Secret boundary
 
-Do not store secret values, secret OCIDs, private keys, tokens, password hashes, or certificate private keys in `infra/configs/` or `infra/runtime/`. Secret-bearing templates remain outside the `files` list. The manifest declares each runtime secret target and its required key names under `components.<name>.secrets`. Runtime secrets come from OCI Vault. The deployment generates these files:
+Do not store secret values, secret OCIDs, private keys, tokens, password hashes, or certificate private keys in `infra/configs/` or `infra/runtime/`. Secret-bearing templates remain outside the `files` list. The manifest declares each runtime secret target and its required key names under `components.<name>.secrets`. The OCID-only reference file is declared by the optional `reference` field of a `components.<name>.secrets` entry. Runtime secrets come from OCI Vault. The deployment generates these files:
 
-| Runtime file                                | Source of secret                           |
-| ------------------------------------------- | ------------------------------------------ |
-| `/etc/traefik/env`                          | `traefik-cloudflare-token`                 |
-| `/data/authelia/env`                        | `authelia-admin-password`                  |
-| `/data/containers/wg-easy/env`              | `wg-easy-admin-password`                   |
-| `/data/monitoring/grafana/env`              | `grafana-admin-password`                   |
-| `/data/monitoring/alerting/env`             | `alert-webhook-url`, `alert-heartbeat-url` |
-| `/etc/traefik/letsencrypt/acme.json`        | ACME certificate state                     |
-| `/data/authelia/config/users_database.yaml` | Bootstrap password hash                    |
+| Reference file                               | Runtime file                                | Source of secret                           |
+| -------------------------------------------- | ------------------------------------------- | ------------------------------------------ |
+| `/etc/secure-stack/secret-refs/traefik.env`  | `/run/traefik/env`                          | `traefik-cloudflare-token`                 |
+| `/etc/secure-stack/secret-refs/grafana.env`  | `/run/monitoring/grafana/env`               | `grafana-admin-password`                   |
+| `/etc/secure-stack/secret-refs/alerting.env` | `/run/monitoring/alerting/env`              | `alert-webhook-url`, `alert-heartbeat-url` |
+| none                                         | `/data/authelia/env`                        | `authelia-admin-password`                  |
+| none                                         | `/data/containers/wg-easy/env`              | `wg-easy-admin-password`                   |
+| none                                         | `/etc/traefik/letsencrypt/acme.json`        | ACME certificate state                     |
+| none                                         | `/data/authelia/config/users_database.yaml` | Bootstrap password hash                    |
 
 The placeholders are `<<INJECT_AT_DEPLOYMENT>>` and `<<INSTANCE_PUBLIC_IP>>`.
 

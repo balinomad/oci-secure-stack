@@ -1,8 +1,8 @@
 [Unit]
 Description=Traefik Edge Router
-After=network-online.target local-fs.target
+After=network-online.target local-fs.target stack-secrets-traefik.service
 Wants=network-online.target
-Requires=local-fs.target
+Requires=local-fs.target stack-secrets-traefik.service
 
 [Service]
 Type=simple
@@ -24,7 +24,7 @@ SystemCallFilter=@system-service
 
 # /var/log/traefik is a symlink to /data/logs/traefik (block volume)
 ReadWritePaths=/data/traefik/letsencrypt /data/logs/traefik
-EnvironmentFile=/etc/traefik/env
+EnvironmentFile=/run/traefik/env
 ExecStart=/usr/local/bin/traefik --configFile=/etc/traefik/traefik.yaml
 Restart=always
 

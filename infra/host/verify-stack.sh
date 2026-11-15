@@ -151,8 +151,7 @@ for dir in \
   /data/logs/traefik \
   /data/containers/wg-easy \
   /data/monitoring/grafana \
-  /data/monitoring/valkey \
-  /data/monitoring/alerting; do
+  /data/monitoring/valkey; do
   if [[ -d "$dir" ]]; then
     pass "Directory exists: ${dir}"
   else
@@ -178,6 +177,8 @@ done
 header "4. Service Health"
 
 SERVICES=(
+  "stack-secrets-traefik.service"
+  "stack-secrets-alerting.service"
   "traefik.service"
   "wg-easy.service"
   "cockpit.socket"
@@ -351,6 +352,27 @@ if systemctl list-unit-files --no-legend grafana-server.service 2>/dev/null | gr
   else
     fail "grafana-server.service is not active"
   fi
+  if systemctl is-active --quiet stack-secrets-grafana.service; then
+    pass "stack-secrets-grafana.service is active"
+  else
+    fail "stack-secrets-grafana.service is not active"
+  fi
+  if systemctl is-enabled --quiet stack-secrets-grafana.service; then
+    pass "stack-secrets-grafana.service is enabled at boot"
+  else
+    fail "stack-secrets-grafana.service is not enabled at boot"
+  fi
+  if [[ -f /run/monitoring/grafana/env ]]; then
+    GRAFANA_ENV_OWNER=$(stat -c %U /run/monitoring/grafana/env 2>/dev/null || true)
+    GRAFANA_ENV_MODE=$(stat -c %a /run/monitoring/grafana/env 2>/dev/null || true)
+    if [[ "$GRAFANA_ENV_OWNER" == "grafana" && "$GRAFANA_ENV_MODE" == "600" ]]; then
+      pass "Grafana runtime environment is owned by grafana with mode 600"
+    else
+      fail "Grafana runtime environment ownership or mode is wrong (${GRAFANA_ENV_OWNER:-missing}:${GRAFANA_ENV_MODE:-missing})"
+    fi
+  else
+    fail "Grafana runtime environment is missing at /run/monitoring/grafana/env"
+  fi
   if curl -fsS --max-time 5 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
     pass "Grafana health endpoint responds on 127.0.0.1:3000"
   else
@@ -417,16 +439,16 @@ else
   fail "Alerting state directory is missing at /var/lib/stack-alerting/state"
 fi
 
-if [[ -f /data/monitoring/alerting/env ]]; then
-  ALERT_ENV_OWNER=$(stat -c %U /data/monitoring/alerting/env 2>/dev/null || true)
-  ALERT_ENV_MODE=$(stat -c %a /data/monitoring/alerting/env 2>/dev/null || true)
+if [[ -f /run/monitoring/alerting/env ]]; then
+  ALERT_ENV_OWNER=$(stat -c %U /run/monitoring/alerting/env 2>/dev/null || true)
+  ALERT_ENV_MODE=$(stat -c %a /run/monitoring/alerting/env 2>/dev/null || true)
   if [[ "$ALERT_ENV_OWNER" == "alerting" && "$ALERT_ENV_MODE" == "600" ]]; then
-    pass "Alerting environment file is owned by alerting with mode 600"
+    pass "Alerting runtime environment is owned by alerting with mode 600"
   else
-    fail "Alerting environment file ownership or mode is wrong (${ALERT_ENV_OWNER:-missing}:${ALERT_ENV_MODE:-missing})"
+    fail "Alerting runtime environment ownership or mode is wrong (${ALERT_ENV_OWNER:-missing}:${ALERT_ENV_MODE:-missing})"
   fi
 else
-  fail "Alerting environment file is missing at /data/monitoring/alerting/env"
+  fail "Alerting runtime environment is missing at /run/monitoring/alerting/env"
 fi
 
 for dropin in \
@@ -441,6 +463,85 @@ for dropin in \
     pass "Failure hook installed: ${dropin}"
   else
     fail "Failure hook missing: ${dropin}"
+  fi
+done
+
+# --------------------------------------------------------------
+# 4.3 Runtime Secrets
+# --------------------------------------------------------------
+header "4.3 Runtime Secrets"
+
+if [[ -x /usr/local/libexec/stack-secret-env ]]; then
+  pass "Secret materializer is installed at /usr/local/libexec/stack-secret-env"
+else
+  fail "Secret materializer is missing at /usr/local/libexec/stack-secret-env"
+fi
+
+if [[ -d /etc/secure-stack/secret-refs ]]; then
+  REF_DIR_OWNER=$(stat -c %U /etc/secure-stack/secret-refs 2>/dev/null || true)
+  REF_DIR_MODE=$(stat -c %a /etc/secure-stack/secret-refs 2>/dev/null || true)
+  if [[ "$REF_DIR_OWNER" == "root" && "$REF_DIR_MODE" == "700" ]]; then
+    pass "Secret reference directory is owned by root with mode 700"
+  else
+    fail "Secret reference directory ownership or mode is wrong (${REF_DIR_OWNER:-missing}:${REF_DIR_MODE:-missing})"
+  fi
+else
+  fail "Secret reference directory is missing at /etc/secure-stack/secret-refs"
+fi
+
+for ref in traefik alerting grafana; do
+  if [[ "$ref" == "grafana" ]] \
+    && ! systemctl list-unit-files --no-legend grafana-server.service \
+      2>/dev/null | grep -q '^grafana-server.service'; then
+    continue
+  fi
+
+  REF_FILE="/etc/secure-stack/secret-refs/${ref}.env"
+  if [[ ! -s "$REF_FILE" ]]; then
+    fail "Secret reference file is missing or empty: ${REF_FILE}"
+    continue
+  fi
+
+  REF_OWNER=$(stat -c %U "$REF_FILE" 2>/dev/null || true)
+  REF_MODE=$(stat -c %a "$REF_FILE" 2>/dev/null || true)
+  if [[ "$REF_OWNER" == "root" && "$REF_MODE" == "600" ]]; then
+    pass "Secret reference file is owned by root with mode 600: ${REF_FILE}"
+  else
+    fail "Secret reference file ownership or mode is wrong (${REF_OWNER:-missing}:${REF_MODE:-missing}): ${REF_FILE}"
+  fi
+
+  if grep -Eqv '^[A-Z_][A-Z0-9_]*=ocid1\.' "$REF_FILE"; then
+    fail "Secret reference file contains a non-OCID value: ${REF_FILE}"
+  else
+    pass "Secret reference file contains OCID references only: ${REF_FILE}"
+  fi
+done
+
+if [[ -f /run/traefik/env ]]; then
+  TRAEFIK_ENV_OWNER=$(stat -c %U /run/traefik/env 2>/dev/null || true)
+  TRAEFIK_ENV_MODE=$(stat -c %a /run/traefik/env 2>/dev/null || true)
+  if [[ "$TRAEFIK_ENV_OWNER" == "traefik" && "$TRAEFIK_ENV_MODE" == "600" ]]; then
+    pass "Traefik runtime environment is owned by traefik with mode 600"
+  else
+    fail "Traefik runtime environment ownership or mode is wrong (${TRAEFIK_ENV_OWNER:-missing}:${TRAEFIK_ENV_MODE:-missing})"
+  fi
+  if grep -Eq '=ocid1\.' /run/traefik/env; then
+    fail "Traefik runtime environment contains an OCID instead of a value"
+  else
+    pass "Traefik runtime environment contains resolved values"
+  fi
+else
+  fail "Traefik runtime environment is missing at /run/traefik/env"
+fi
+
+for legacy in \
+  /etc/traefik/env \
+  /data/monitoring/grafana/env \
+  /data/monitoring/alerting/env; do
+  if [[ -e "$legacy" ]]; then
+    fail "Legacy secret file still exists: ${legacy}"
+  else
+    pass "Legacy secret file is absent: ${legacy}"
   fi
 done
 

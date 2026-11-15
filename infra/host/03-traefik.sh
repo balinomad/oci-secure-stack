@@ -9,7 +9,7 @@ readonly REPO_ROOT
 readonly TRAEFIK_USER="traefik"
 readonly TRAEFIK_CONFIG="/etc/traefik/traefik.yaml"
 readonly TRAEFIK_DYNAMIC_DIR="/etc/traefik/config"
-readonly TRAEFIK_ENV="/etc/traefik/env"
+readonly TRAEFIK_LEGACY_ENV="/etc/traefik/env"
 readonly TRAEFIK_BINARY="/usr/local/bin/traefik"
 readonly TRAEFIK_UNIT="/etc/systemd/system/traefik.service"
 readonly TRAEFIK_LOGROTATE="/etc/logrotate.d/traefik"
@@ -17,7 +17,11 @@ readonly LETSENCRYPT_LINK="/etc/traefik/letsencrypt"
 readonly LETSENCRYPT_DIR="/data/traefik/letsencrypt"
 readonly LOG_LINK="/var/log/traefik"
 readonly LOG_DIR="/data/logs/traefik"
-readonly CF_PLACEHOLDER="CF_DNS_API_TOKEN=<<INJECT_AT_DEPLOYMENT>>"
+readonly SECRET_REF_DIR="/etc/secure-stack/secret-refs"
+readonly TRAEFIK_SECRET_REF="${SECRET_REF_DIR}/traefik.env"
+readonly TRAEFIK_SECRET_UNIT="/etc/systemd/system/stack-secrets-traefik.service"
+readonly SECRET_HELPER="/usr/local/libexec/stack-secret-env"
+readonly SECRET_TMPFILES="/etc/tmpfiles.d/stack-secrets.conf"
 
 TMP_CONFIG=""
 TMP_DIR=""
@@ -33,18 +37,22 @@ Usage: 03-traefik.sh
 
 Install or repair the Traefik edge router from a repository checkout.
 The script is idempotent. It creates the service user, directories, symlinks,
-environment file, reads locked release values from infra/manifest.lock.yaml, installs
-the systemd unit and missing configuration, then verifies the release checksum
-and starts the service.
+secret reference file, reads locked release values from infra/manifest.lock.yaml,
+installs the systemd units and missing configuration, then verifies the release
+checksum and starts the service.
 
 Existing Traefik configuration files under /etc/traefik are preserved.
 Delete a file or render it from infra/configs/traefik to replace it.
 
+The Cloudflare token is fetched from OCI Vault by stack-secrets-traefik.service
+and written to /run/traefik/env. The reference file contains the secret OCID
+only.
+
 Environment:
   DOMAIN             Required when a Traefik configuration file is absent.
   ACME_EMAIL         Required when a Traefik configuration file is absent.
-  CF_DNS_API_TOKEN   Cloudflare API token for the DNS challenge.
-  CF_SECRET_OCID     OCI Vault secret OCID for CF_DNS_API_TOKEN.
+  CF_SECRET_OCID     OCI Vault secret OCID for CF_DNS_API_TOKEN. Required
+                     when the reference file is absent.
 USAGE
 }
 
@@ -70,9 +78,9 @@ require_root() {
 
 require_commands() {
   local command
-  for command in install systemctl useradd groupadd getent chown chmod \
-    curl sha256sum tar uname sed grep awk mktemp mountpoint sleep base64 \
-    ln readlink rmdir find; do
+  for command in install systemctl systemd-tmpfiles useradd groupadd getent \
+    chown chmod curl sha256sum tar uname sed grep awk mktemp mountpoint \
+    sleep ln readlink rmdir find; do
     if ! command -v "${command}" >/dev/null 2>&1; then
       err "required command not found: ${command}"
       exit 1
@@ -109,41 +117,48 @@ ensure_dirs() {
     "${LETSENCRYPT_DIR}"
   install -d -m 0750 -o "${TRAEFIK_USER}" -g "${TRAEFIK_USER}" \
     "${LOG_DIR}"
+  install -d -m 0700 -o root -g root "${SECRET_REF_DIR}"
 }
 
-ensure_env() {
-  local token="${CF_DNS_API_TOKEN:-}"
-
-  if [[ -s "${TRAEFIK_ENV}" ]] \
-    && grep -q '^CF_DNS_API_TOKEN=.' "${TRAEFIK_ENV}" \
-    && ! grep -qxF "${CF_PLACEHOLDER}" "${TRAEFIK_ENV}"; then
-    chown "${TRAEFIK_USER}:${TRAEFIK_USER}" "${TRAEFIK_ENV}"
-    chmod 0600 "${TRAEFIK_ENV}"
-    return 0
+install_secret_support() {
+  install -D -m 0755 -o root -g root \
+    "${REPO_ROOT}/infra/runtime/secrets/materialize.sh" "${SECRET_HELPER}"
+  install -D -m 0644 -o root -g root \
+    "${REPO_ROOT}/infra/configs/systemd/stack-secrets.conf" \
+    "${SECRET_TMPFILES}"
+  install -D -m 0644 -o root -g root \
+    "${REPO_ROOT}/infra/configs/systemd/stack-secrets-traefik.service" \
+    "${TRAEFIK_SECRET_UNIT}"
+  systemd-tmpfiles --create "${SECRET_TMPFILES}"
+  if command -v restorecon >/dev/null 2>&1; then
+    restorecon -F "${SECRET_HELPER}" "${TRAEFIK_SECRET_UNIT}" \
+      "${SECRET_TMPFILES}"
   fi
+}
 
-  if [[ -z "${token}" && -n "${CF_SECRET_OCID:-}" ]]; then
-    if ! command -v oci >/dev/null 2>&1; then
-      err "the OCI CLI is required to fetch CF_SECRET_OCID"
+ensure_secret_ref() {
+  if [[ -n "${CF_SECRET_OCID:-}" ]]; then
+    if [[ "${CF_SECRET_OCID}" != ocid1.* ]]; then
+      err "CF_SECRET_OCID must be an OCI Vault secret OCID"
       exit 1
     fi
-    token="$(
-      oci secrets secret-bundle get \
-        --secret-id "${CF_SECRET_OCID}" \
-        --query "data.secretBundleContent.content" \
-        --raw-output | base64 -d
-    )"
-  fi
-
-  if [[ -z "${token}" ]]; then
-    err "set CF_DNS_API_TOKEN or CF_SECRET_OCID"
+    umask 077
+    printf 'CF_DNS_API_TOKEN=%s\n' "${CF_SECRET_OCID}" \
+      > "${TRAEFIK_SECRET_REF}"
+  elif [[ ! -s "${TRAEFIK_SECRET_REF}" ]]; then
+    err "set CF_SECRET_OCID or provide ${TRAEFIK_SECRET_REF}"
     exit 1
   fi
 
-  umask 077
-  printf 'CF_DNS_API_TOKEN=%s\n' "${token}" > "${TRAEFIK_ENV}"
-  chown "${TRAEFIK_USER}:${TRAEFIK_USER}" "${TRAEFIK_ENV}"
-  chmod 0600 "${TRAEFIK_ENV}"
+  chown root:root "${TRAEFIK_SECRET_REF}"
+  chmod 0600 "${TRAEFIK_SECRET_REF}"
+}
+
+remove_legacy_env() {
+  if [[ -e "${TRAEFIK_LEGACY_ENV}" ]]; then
+    rm -f -- "${TRAEFIK_LEGACY_ENV}"
+    printf 'Removed legacy environment file %s.\n' "${TRAEFIK_LEGACY_ENV}"
+  fi
 }
 
 render_if_missing() {
@@ -395,7 +410,8 @@ configure_firewall() {
 
 start_service() {
   systemctl daemon-reload
-  systemctl enable "${TRAEFIK_UNIT##*/}"
+  systemctl enable stack-secrets-traefik.service "${TRAEFIK_UNIT##*/}"
+  systemctl restart stack-secrets-traefik.service
   systemctl restart "${TRAEFIK_UNIT##*/}"
 }
 
@@ -448,7 +464,8 @@ main() {
   require_data_mount
   create_user
   ensure_dirs
-  ensure_env
+  install_secret_support
+  ensure_secret_ref
   ensure_config
   fix_ownership
   install_files
@@ -459,6 +476,7 @@ main() {
   configure_firewall
   start_service
   check_health
+  remove_legacy_env
 
   printf 'Traefik installed or updated.\n'
 }

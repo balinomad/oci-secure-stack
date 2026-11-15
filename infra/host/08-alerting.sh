@@ -7,8 +7,13 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
 readonly REPO_ROOT
 
 readonly ALERTING_USER="alerting"
-readonly ENV_FILE="/data/monitoring/alerting/env"
+readonly ALERTING_LEGACY_ENV="/data/monitoring/alerting/env"
+readonly ALERTING_RUNTIME_ENV="/run/monitoring/alerting/env"
 readonly STATE_DIR="/var/lib/stack-alerting"
+readonly SECRET_REF_DIR="/etc/secure-stack/secret-refs"
+readonly ALERTING_SECRET_REF="${SECRET_REF_DIR}/alerting.env"
+readonly SECRET_HELPER="/usr/local/libexec/stack-secret-env"
+readonly SECRET_TMPFILES="/etc/tmpfiles.d/stack-secrets.conf"
 
 usage() {
   cat <<'USAGE'
@@ -16,13 +21,15 @@ Usage: 08-alerting.sh
 
 Install or update the alert delivery components from a repository checkout.
 The script is idempotent. It creates the alerting service user, installs the
-runtime script, pmie rules, systemd units, and timers, and preserves an
-existing /data/monitoring/alerting/env file.
+runtime script, pmie rules, systemd units, and timers.
+
+The alert URLs are fetched from OCI Vault by stack-secrets-alerting.service and
+written to /run/monitoring/alerting/env. The reference file contains the secret
+OCIDs only. Set both OCIDs to create or rotate the reference file. An existing
+reference file is preserved when neither OCID is set.
 
 Environment:
-  ALERT_WEBHOOK_URL            Direct webhook URL for first setup.
   ALERT_WEBHOOK_SECRET_OCID    OCI Vault secret OCID for the webhook URL.
-  ALERT_HEARTBEAT_URL          Direct heartbeat URL for first setup.
   ALERT_HEARTBEAT_SECRET_OCID  OCI Vault secret OCID for the heartbeat URL.
 USAGE
 }
@@ -62,43 +69,73 @@ create_user() {
     --shell /usr/sbin/nologin "${ALERTING_USER}"
 }
 
-fetch_secret() {
-  local secret_id="$1"
-
-  if ! command -v oci >/dev/null 2>&1; then
-    err "the OCI CLI is required to fetch ${secret_id}"
-    exit 1
+install_secret_support() {
+  install -d -m 0700 -o root -g root "${SECRET_REF_DIR}"
+  install -D -m 0755 -o root -g root \
+    "${REPO_ROOT}/infra/runtime/secrets/materialize.sh" "${SECRET_HELPER}"
+  install -D -m 0644 -o root -g root \
+    "${REPO_ROOT}/infra/configs/systemd/stack-secrets.conf" \
+    "${SECRET_TMPFILES}"
+  if command -v restorecon >/dev/null 2>&1; then
+    restorecon -F "${SECRET_HELPER}" "${SECRET_TMPFILES}"
   fi
-
-  oci secrets secret-bundle get \
-    --secret-id "${secret_id}" \
-    --query "data.secretBundleContent.content" \
-    --raw-output | base64 -d
 }
 
-write_env() {
-  local webhook_url="${ALERT_WEBHOOK_URL:-}"
-  local heartbeat_url="${ALERT_HEARTBEAT_URL:-}"
+ensure_secret_ref() {
+  local webhook_ocid="${ALERT_WEBHOOK_SECRET_OCID:-}"
+  local heartbeat_ocid="${ALERT_HEARTBEAT_SECRET_OCID:-}"
 
-  if [[ -s "${ENV_FILE}" ]]; then
-    return 0
-  fi
-
-  if [[ -z "${webhook_url}" && -n "${ALERT_WEBHOOK_SECRET_OCID:-}" ]]; then
-    webhook_url="$(fetch_secret "${ALERT_WEBHOOK_SECRET_OCID}")"
-  fi
-  if [[ -z "${heartbeat_url}" && -n "${ALERT_HEARTBEAT_SECRET_OCID:-}" ]]; then
-    heartbeat_url="$(fetch_secret "${ALERT_HEARTBEAT_SECRET_OCID}")"
-  fi
-
-  if [[ -z "${webhook_url}" ]]; then
-    err "set ALERT_WEBHOOK_URL or ALERT_WEBHOOK_SECRET_OCID"
+  if [[ -n "${webhook_ocid}" && -z "${heartbeat_ocid}" ]] \
+    || [[ -z "${webhook_ocid}" && -n "${heartbeat_ocid}" ]]; then
+    err "set both ALERT_WEBHOOK_SECRET_OCID and ALERT_HEARTBEAT_SECRET_OCID"
     exit 1
   fi
-  if [[ -z "${heartbeat_url}" ]]; then
-    err "set ALERT_HEARTBEAT_URL or ALERT_HEARTBEAT_SECRET_OCID"
+
+  if [[ -n "${webhook_ocid}" ]]; then
+    if [[ "${webhook_ocid}" != ocid1.* ]]; then
+      err "ALERT_WEBHOOK_SECRET_OCID must be an OCI Vault secret OCID"
+      exit 1
+    fi
+    if [[ "${heartbeat_ocid}" != ocid1.* ]]; then
+      err "ALERT_HEARTBEAT_SECRET_OCID must be an OCI Vault secret OCID"
+      exit 1
+    fi
+    umask 077
+    {
+      printf 'ALERT_WEBHOOK_URL=%s\n' "${webhook_ocid}"
+      printf 'ALERT_HEARTBEAT_URL=%s\n' "${heartbeat_ocid}"
+    } > "${ALERTING_SECRET_REF}"
+  elif [[ ! -s "${ALERTING_SECRET_REF}" ]]; then
+    err "set both alert secret OCIDs or provide ${ALERTING_SECRET_REF}"
     exit 1
   fi
+
+  chown root:root "${ALERTING_SECRET_REF}"
+  chmod 0600 "${ALERTING_SECRET_REF}"
+}
+
+validate_runtime_env() {
+  local key
+  local value
+  local webhook_url=""
+  local heartbeat_url=""
+
+  if [[ ! -r "${ALERTING_RUNTIME_ENV}" ]]; then
+    err "cannot read ${ALERTING_RUNTIME_ENV}"
+    exit 1
+  fi
+
+  while IFS='=' read -r key value || [[ -n "${key}" ]]; do
+    case "${key}" in
+      ALERT_WEBHOOK_URL)
+        webhook_url="${value}"
+        ;;
+      ALERT_HEARTBEAT_URL)
+        heartbeat_url="${value}"
+        ;;
+    esac
+  done < "${ALERTING_RUNTIME_ENV}"
+
   if [[ "${webhook_url}" != https://* ]]; then
     err "the webhook URL must use HTTPS"
     exit 1
@@ -107,16 +144,13 @@ write_env() {
     err "the heartbeat URL must use HTTPS"
     exit 1
   fi
+}
 
-  install -d -m 0750 -o "${ALERTING_USER}" -g "${ALERTING_USER}" \
-    /data/monitoring/alerting
-  umask 077
-  {
-    printf 'ALERT_WEBHOOK_URL=%q\n' "${webhook_url}"
-    printf 'ALERT_HEARTBEAT_URL=%q\n' "${heartbeat_url}"
-  } > "${ENV_FILE}"
-  chown "${ALERTING_USER}:${ALERTING_USER}" "${ENV_FILE}"
-  chmod 0600 "${ENV_FILE}"
+remove_legacy_env() {
+  if [[ -e "${ALERTING_LEGACY_ENV}" ]]; then
+    rm -f -- "${ALERTING_LEGACY_ENV}"
+    printf 'Removed legacy environment file %s.\n' "${ALERTING_LEGACY_ENV}"
+  fi
 }
 
 install_runtime() {
@@ -145,6 +179,7 @@ install_units() {
   local source
 
   for source in \
+    stack-secrets-alerting.service \
     pcp-alert-pmie.service \
     pcp-alert-notify@.service \
     pcp-service-check.service \
@@ -181,12 +216,17 @@ main() {
   require_root
   require_commands
   create_user
-  write_env
+  install_secret_support
+  ensure_secret_ref
   install_runtime
   install_units
 
-  systemd-tmpfiles --create /etc/tmpfiles.d/pcp-alerting.conf
+  systemd-tmpfiles --create /etc/tmpfiles.d/stack-secrets.conf \
+    /etc/tmpfiles.d/pcp-alerting.conf
   systemctl daemon-reload
+  systemctl enable stack-secrets-alerting.service
+  systemctl restart stack-secrets-alerting.service
+  validate_runtime_env
 
   if ! runuser -u "${ALERTING_USER}" -- \
     pmie -C -c /etc/pcp/pmie/stack-alerts.pmie; then
@@ -204,6 +244,7 @@ main() {
     pcp-service-check.timer \
     pcp-cert-check.timer \
     pcp-heartbeat.timer
+  remove_legacy_env
 
   printf 'Alert delivery installed.\n'
   printf 'Run a test: sudo systemctl start pcp-alert-notify@test.service\n'

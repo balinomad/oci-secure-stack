@@ -1,7 +1,8 @@
 [Unit]
 Description=Check the earliest Traefik certificate expiry
-After=network-online.target
+After=network-online.target stack-secrets-alerting.service
 Wants=network-online.target
+Requires=stack-secrets-alerting.service
 OnFailure=pcp-alert-notify@%n.service
 
 [Service]

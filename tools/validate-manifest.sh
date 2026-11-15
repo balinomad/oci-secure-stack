@@ -206,8 +206,9 @@ validate_files() {
   done
 }
 
-validate_secrets() {
+validate_secret_section() {
   local name="$1"
+  local section="$2"
   local count
   local i
   local extra
@@ -215,81 +216,98 @@ validate_secrets() {
   local target
   local owner
   local mode
+  local reference
   local keys_type
   local keys_count
   local bad
   local duplicate
 
-  if [[ "$(component_query "${name}" '.secrets | type')" \
+  if [[ "$(component_query "${name}" ".${section} | type")" \
     != "!!seq" ]]; then
-    fail "component ${name}: secrets must be a list"
+    fail "component ${name}: ${section} must be a list"
   fi
 
-  count="$(component_query "${name}" '.secrets | length')"
+  count="$(component_query "${name}" ".${section} | length")"
   if (( count == 0 )); then
-    fail "component ${name}: secrets must not be empty"
+    fail "component ${name}: ${section} must not be empty"
   fi
 
   for (( i = 0; i < count; i++ )); do
-    item_type="$(entry_query "${name}" "secrets" "${i}" 'type')"
+    item_type="$(entry_query "${name}" "${section}" "${i}" 'type')"
     if [[ "${item_type}" != "!!map" ]]; then
-      fail "component ${name}: secrets[${i}] must be a mapping"
+      fail "component ${name}: ${section}[${i}] must be a mapping"
     fi
 
-    extra="$(entry_query "${name}" "secrets" "${i}" \
-      'keys - ["target", "owner", "mode", "keys"] | .[]')"
+    extra="$(entry_query "${name}" "${section}" "${i}" \
+      'keys - ["target", "owner", "mode", "reference", "keys"] | .[]')"
     if [[ -n "${extra}" ]]; then
-      fail "component ${name}: secrets[${i}] has unexpected keys: ${extra}"
+      fail "component ${name}: ${section}[${i}] has unexpected keys: ${extra}"
     fi
 
-    require_string "${name}" "secrets" "${i}" "target"
+    require_string "${name}" "${section}" "${i}" "target"
     target="${FIELD_VALUE}"
-    require_string "${name}" "secrets" "${i}" "owner"
+    require_string "${name}" "${section}" "${i}" "owner"
     owner="${FIELD_VALUE}"
-    require_string "${name}" "secrets" "${i}" "mode"
+    require_string "${name}" "${section}" "${i}" "mode"
     mode="${FIELD_VALUE}"
 
     if [[ "${target}" != /* ]]; then
-      fail "component ${name}: secrets[${i}].target must be absolute"
+      fail "component ${name}: ${section}[${i}].target must be absolute"
     fi
     if [[ "${target}" =~ (^|/)\.\.(/|$) ]]; then
-      fail "component ${name}: secrets[${i}].target must not contain .."
+      fail "component ${name}: ${section}[${i}].target must not contain .."
     fi
     if [[ ! "${owner}" =~ ^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+$ ]]; then
-      fail "component ${name}: secrets[${i}].owner must be user:group"
+      fail "component ${name}: ${section}[${i}].owner must be user:group"
     fi
     if [[ ! "${mode}" =~ ^[0-7]{4}$ ]]; then
-      fail "component ${name}: secrets[${i}].mode must be four octal digits"
+      fail "component ${name}: ${section}[${i}].mode must be four octal digits"
     fi
 
-    keys_type="$(entry_query "${name}" "secrets" "${i}" '.keys | type')"
+    if [[ "$(entry_query "${name}" "${section}" "${i}" \
+      'has("reference")')" == "true" ]]; then
+      require_string "${name}" "${section}" "${i}" "reference"
+      reference="${FIELD_VALUE}"
+      if [[ "${reference}" != /etc/secure-stack/secret-refs/* ]]; then
+        fail "component ${name}: ${section}[${i}].reference must be below /etc/secure-stack/secret-refs"
+      fi
+      if [[ "${reference}" =~ (^|/)\.\.(/|$) ]]; then
+        fail "component ${name}: ${section}[${i}].reference must not contain .."
+      fi
+    fi
+
+    keys_type="$(entry_query "${name}" "${section}" "${i}" '.keys | type')"
     if [[ "${keys_type}" != "!!seq" ]]; then
-      fail "component ${name}: secrets[${i}].keys must be a list"
+      fail "component ${name}: ${section}[${i}].keys must be a list"
     fi
 
-    keys_count="$(entry_query "${name}" "secrets" "${i}" '.keys | length')"
+    keys_count="$(entry_query "${name}" "${section}" "${i}" '.keys | length')"
     if (( keys_count == 0 )); then
-      fail "component ${name}: secrets[${i}].keys must not be empty"
+      fail "component ${name}: ${section}[${i}].keys must not be empty"
     fi
 
-    bad="$(entry_query "${name}" "secrets" "${i}" \
+    bad="$(entry_query "${name}" "${section}" "${i}" \
       '.keys[] | select(type != "!!str")')"
     if [[ -n "${bad}" ]]; then
-      fail "component ${name}: secrets[${i}].keys entries must be strings"
+      fail "component ${name}: ${section}[${i}].keys entries must be strings"
     fi
 
-    bad="$(entry_query "${name}" "secrets" "${i}" \
+    bad="$(entry_query "${name}" "${section}" "${i}" \
       '.keys[] | select(test("^[A-Z_][A-Z0-9_]*$") | not)')"
     if [[ -n "${bad}" ]]; then
-      fail "component ${name}: secrets[${i}].keys has invalid names: ${bad}"
+      fail "component ${name}: ${section}[${i}].keys has invalid names: ${bad}"
     fi
 
-    duplicate="$(entry_query "${name}" "secrets" "${i}" \
+    duplicate="$(entry_query "${name}" "${section}" "${i}" \
       '.keys | group_by(.)[] | select(length > 1) | .[0]')"
     if [[ -n "${duplicate}" ]]; then
-      fail "component ${name}: secrets[${i}].keys has duplicates: ${duplicate}"
+      fail "component ${name}: ${section}[${i}].keys has duplicates: ${duplicate}"
     fi
   done
+}
+
+validate_secrets() {
+  validate_secret_section "$1" "secrets"
 }
 
 validate_source() {

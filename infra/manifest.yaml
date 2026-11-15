@@ -2,7 +2,9 @@
 # tools/render-config.sh maps component files to host paths.
 # tools/update-lock.sh resolves source blocks for lockable components.
 # Every files entry is rendered into the cloud-config template.
-# Secrets are generated on the host and contain no values here.
+# Secrets are generated on the host and contain no values here. A secrets entry
+# with a reference field names the OCID-only input file. Runtime values are
+# written below /run by the stack-secret-env helper.
 version: 1
 architecture: amd64
 
@@ -58,10 +60,15 @@ components:
         target: /etc/systemd/system/pcp-heartbeat.timer
         owner: root:root
         mode: "0644"
+      - source: infra/configs/systemd/stack-secrets-alerting.service
+        target: /etc/systemd/system/stack-secrets-alerting.service
+        owner: root:root
+        mode: "0644"
     secrets:
-      - target: /data/monitoring/alerting/env
+      - target: /run/monitoring/alerting/env
         owner: alerting:alerting
         mode: "0600"
+        reference: /etc/secure-stack/secret-refs/alerting.env
         keys:
           - ALERT_WEBHOOK_URL
           - ALERT_HEARTBEAT_URL
@@ -135,10 +142,15 @@ components:
         target: /etc/systemd/system/grafana-server.service.d/onfailure.conf
         owner: root:root
         mode: "0644"
+      - source: infra/configs/systemd/stack-secrets-grafana.service
+        target: /etc/systemd/system/stack-secrets-grafana.service
+        owner: root:root
+        mode: "0644"
     secrets:
-      - target: /data/monitoring/grafana/env
+      - target: /run/monitoring/grafana/env
         owner: grafana:grafana
         mode: "0600"
+        reference: /etc/secure-stack/secret-refs/grafana.env
         keys:
           - GF_SECURITY_ADMIN_PASSWORD
 
@@ -167,6 +179,18 @@ components:
         mode: "0644"
       - source: infra/configs/systemd/pmproxy.service.d/onfailure.conf
         target: /etc/systemd/system/pmproxy.service.d/onfailure.conf
+        owner: root:root
+        mode: "0644"
+
+  secrets:
+    version: "unpinned"
+    files:
+      - source: infra/runtime/secrets/materialize.sh
+        target: /usr/local/libexec/stack-secret-env
+        owner: root:root
+        mode: "0755"
+      - source: infra/configs/systemd/stack-secrets.conf
+        target: /etc/tmpfiles.d/stack-secrets.conf
         owner: root:root
         mode: "0644"
 
@@ -202,10 +226,15 @@ components:
         target: /etc/systemd/system/traefik.service.d/onfailure.conf
         owner: root:root
         mode: "0644"
+      - source: infra/configs/systemd/stack-secrets-traefik.service
+        target: /etc/systemd/system/stack-secrets-traefik.service
+        owner: root:root
+        mode: "0644"
     secrets:
-      - target: /etc/traefik/env
+      - target: /run/traefik/env
         owner: traefik:traefik
         mode: "0600"
+        reference: /etc/secure-stack/secret-refs/traefik.env
         keys:
           - CF_DNS_API_TOKEN
 

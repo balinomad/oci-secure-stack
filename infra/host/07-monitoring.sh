@@ -6,14 +6,25 @@ readonly SCRIPT_DIR
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
 readonly REPO_ROOT
 
+readonly SECRET_REF_DIR="/etc/secure-stack/secret-refs"
+readonly GRAFANA_SECRET_REF="${SECRET_REF_DIR}/grafana.env"
+readonly GRAFANA_SECRET_UNIT="/etc/systemd/system/stack-secrets-grafana.service"
+readonly GRAFANA_LEGACY_ENV="/data/monitoring/grafana/env"
+readonly SECRET_HELPER="/usr/local/libexec/stack-secret-env"
+readonly SECRET_TMPFILES="/etc/tmpfiles.d/stack-secrets.conf"
+
 usage() {
   cat <<'USAGE'
 Usage: 07-monitoring.sh <live|history|none>
 
 Install or enable the selected local monitoring profile. The script expects
 the configuration files staged by cloud-init under /etc/pcp, /etc/grafana,
-and /etc/valkey. It does not write a Grafana password unless
-GRAFANA_ADMIN_PASSWORD or GRAFANA_SECRET_OCID is provided.
+and /etc/valkey.
+
+The Grafana admin password is fetched from OCI Vault by
+stack-secrets-grafana.service and written to /run/monitoring/grafana/env.
+The reference file contains the secret OCID only. Set GRAFANA_SECRET_OCID
+when the reference file is absent.
 USAGE
 }
 
@@ -28,34 +39,46 @@ require_root() {
   fi
 }
 
-write_grafana_env() {
-  local env_file="/data/monitoring/grafana/env"
-  local password="${GRAFANA_ADMIN_PASSWORD:-}"
-
-  if [[ -s "${env_file}" ]]; then
-    return 0
+install_secret_support() {
+  install -d -m 0700 -o root -g root "${SECRET_REF_DIR}"
+  install -D -m 0755 -o root -g root \
+    "${REPO_ROOT}/infra/runtime/secrets/materialize.sh" "${SECRET_HELPER}"
+  install -D -m 0644 -o root -g root \
+    "${REPO_ROOT}/infra/configs/systemd/stack-secrets.conf" \
+    "${SECRET_TMPFILES}"
+  install -D -m 0644 -o root -g root \
+    "${REPO_ROOT}/infra/configs/systemd/stack-secrets-grafana.service" \
+    "${GRAFANA_SECRET_UNIT}"
+  systemd-tmpfiles --create "${SECRET_TMPFILES}"
+  if command -v restorecon >/dev/null 2>&1; then
+    restorecon -F "${SECRET_HELPER}" "${GRAFANA_SECRET_UNIT}" \
+      "${SECRET_TMPFILES}"
   fi
+}
 
-  if [[ -z "${password}" && -n "${GRAFANA_SECRET_OCID:-}" ]]; then
-    if ! command -v oci >/dev/null 2>&1; then
-      err "oci CLI is required to fetch GRAFANA_SECRET_OCID"
+ensure_grafana_secret_ref() {
+  if [[ -n "${GRAFANA_SECRET_OCID:-}" ]]; then
+    if [[ "${GRAFANA_SECRET_OCID}" != ocid1.* ]]; then
+      err "GRAFANA_SECRET_OCID must be an OCI Vault secret OCID"
       exit 1
     fi
-    password="$(oci secrets secret-bundle get \
-      --secret-id "${GRAFANA_SECRET_OCID}" \
-      --query "data.secretBundleContent.content" \
-      --raw-output | base64 -d)"
-  fi
-
-  if [[ -z "${password}" ]]; then
-    err "no Grafana password: set GRAFANA_ADMIN_PASSWORD or GRAFANA_SECRET_OCID"
+    umask 077
+    printf 'GF_SECURITY_ADMIN_PASSWORD=%s\n' "${GRAFANA_SECRET_OCID}" \
+      > "${GRAFANA_SECRET_REF}"
+  elif [[ ! -s "${GRAFANA_SECRET_REF}" ]]; then
+    err "set GRAFANA_SECRET_OCID or provide ${GRAFANA_SECRET_REF}"
     exit 1
   fi
 
-  umask 077
-  printf 'GF_SECURITY_ADMIN_PASSWORD=%s\n' "${password}" > "${env_file}"
-  chown grafana:grafana "${env_file}"
-  chmod 0600 "${env_file}"
+  chown root:root "${GRAFANA_SECRET_REF}"
+  chmod 0600 "${GRAFANA_SECRET_REF}"
+}
+
+remove_legacy_env() {
+  if [[ -e "${GRAFANA_LEGACY_ENV}" ]]; then
+    rm -f -- "${GRAFANA_LEGACY_ENV}"
+    printf 'Removed legacy environment file %s.\n' "${GRAFANA_LEGACY_ENV}"
+  fi
 }
 
 install_pcp() {
@@ -101,9 +124,13 @@ install_grafana() {
   install -D -m 0644 -o root -g root \
     "${REPO_ROOT}/infra/configs/systemd/grafana-server.service.d/data.conf" \
     /etc/systemd/system/grafana-server.service.d/data.conf
-  write_grafana_env
+  install_secret_support
+  ensure_grafana_secret_ref
   systemctl daemon-reload
-  systemctl enable --now grafana-server.service
+  systemctl enable stack-secrets-grafana.service grafana-server.service
+  systemctl restart stack-secrets-grafana.service
+  systemctl restart grafana-server.service
+  remove_legacy_env
 }
 
 install_valkey() {
