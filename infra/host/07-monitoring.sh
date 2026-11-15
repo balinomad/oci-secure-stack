@@ -9,7 +9,6 @@ readonly REPO_ROOT
 readonly SECRET_REF_DIR="/etc/secure-stack/secret-refs"
 readonly GRAFANA_SECRET_REF="${SECRET_REF_DIR}/grafana.env"
 readonly GRAFANA_SECRET_UNIT="/etc/systemd/system/stack-secrets-grafana.service"
-readonly GRAFANA_LEGACY_ENV="/data/monitoring/grafana/env"
 readonly SECRET_HELPER="/usr/local/libexec/stack-secret-env"
 readonly SECRET_TMPFILES="/etc/tmpfiles.d/stack-secrets.conf"
 
@@ -74,13 +73,6 @@ ensure_grafana_secret_ref() {
   chmod 0600 "${GRAFANA_SECRET_REF}"
 }
 
-remove_legacy_env() {
-  if [[ -e "${GRAFANA_LEGACY_ENV}" ]]; then
-    rm -f -- "${GRAFANA_LEGACY_ENV}"
-    printf 'Removed legacy environment file %s.\n' "${GRAFANA_LEGACY_ENV}"
-  fi
-}
-
 install_pcp() {
   dnf install -y pcp pcp-zeroconf pcp-pmda-podman pcp-pmda-openmetrics
   install -D -m 0644 -o root -g root \
@@ -130,7 +122,6 @@ install_grafana() {
   systemctl enable stack-secrets-grafana.service grafana-server.service
   systemctl restart stack-secrets-grafana.service
   systemctl restart grafana-server.service
-  remove_legacy_env
 }
 
 install_valkey() {

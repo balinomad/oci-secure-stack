@@ -9,7 +9,6 @@ readonly REPO_ROOT
 readonly TRAEFIK_USER="traefik"
 readonly TRAEFIK_CONFIG="/etc/traefik/traefik.yaml"
 readonly TRAEFIK_DYNAMIC_DIR="/etc/traefik/config"
-readonly TRAEFIK_LEGACY_ENV="/etc/traefik/env"
 readonly TRAEFIK_BINARY="/usr/local/bin/traefik"
 readonly TRAEFIK_UNIT="/etc/systemd/system/traefik.service"
 readonly TRAEFIK_LOGROTATE="/etc/logrotate.d/traefik"
@@ -152,13 +151,6 @@ ensure_secret_ref() {
 
   chown root:root "${TRAEFIK_SECRET_REF}"
   chmod 0600 "${TRAEFIK_SECRET_REF}"
-}
-
-remove_legacy_env() {
-  if [[ -e "${TRAEFIK_LEGACY_ENV}" ]]; then
-    rm -f -- "${TRAEFIK_LEGACY_ENV}"
-    printf 'Removed legacy environment file %s.\n' "${TRAEFIK_LEGACY_ENV}"
-  fi
 }
 
 render_if_missing() {
@@ -472,7 +464,6 @@ main() {
   configure_firewall
   start_service
   check_health
-  remove_legacy_env
 
   printf 'Traefik installed or updated.\n'
 }

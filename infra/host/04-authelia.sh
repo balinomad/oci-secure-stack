@@ -439,30 +439,6 @@ stop_service() {
   run_as_authelia systemctl --user stop authelia.service >/dev/null 2>&1 || true
 }
 
-migrate_database() {
-  local legacy
-  local suffix
-  local source
-  local target="${DB_DIR}/authelia.sqlite3"
-
-  for legacy in db.sqlite3 storage.sqlite storage.sqlite3; do
-    if [[ ! -f "${DB_DIR}/${legacy}" ]]; then
-      continue
-    fi
-    if [[ -e "${target}" ]]; then
-      err "both ${DB_DIR}/${legacy} and ${target} exist; resolve manually"
-      exit 1
-    fi
-    for suffix in "" "-wal" "-shm"; do
-      source="${DB_DIR}/${legacy}${suffix}"
-      if [[ -f "${source}" ]]; then
-        mv "${source}" "${target}${suffix}"
-      fi
-    done
-    printf 'Migrated %s to %s\n' "${DB_DIR}/${legacy}" "${target}"
-  done
-}
-
 install_unit() {
   local uid
   local gid
@@ -579,7 +555,6 @@ main() {
   stop_service
   materialize_secrets
   verify_storage_key
-  migrate_database
   configure_selinux
   fix_ownership
   validate_config

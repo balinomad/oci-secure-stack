@@ -581,17 +581,6 @@ else
   fail "Authelia runtime environment is missing at /run/authelia/env"
 fi
 
-for legacy in \
-  /etc/traefik/env \
-  /data/monitoring/grafana/env \
-  /data/monitoring/alerting/env; do
-  if [[ -e "$legacy" ]]; then
-    fail "Legacy secret file still exists: ${legacy}"
-  else
-    pass "Legacy secret file is absent: ${legacy}"
-  fi
-done
-
 # --------------------------------------------------------------
 # 4.4 Security Headers
 # --------------------------------------------------------------

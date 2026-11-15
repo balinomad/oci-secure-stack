@@ -7,7 +7,6 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
 readonly REPO_ROOT
 
 readonly ALERTING_USER="alerting"
-readonly ALERTING_LEGACY_ENV="/data/monitoring/alerting/env"
 readonly ALERTING_RUNTIME_ENV="/run/monitoring/alerting/env"
 readonly STATE_DIR="/var/lib/stack-alerting"
 readonly SECRET_REF_DIR="/etc/secure-stack/secret-refs"
@@ -146,13 +145,6 @@ validate_runtime_env() {
   fi
 }
 
-remove_legacy_env() {
-  if [[ -e "${ALERTING_LEGACY_ENV}" ]]; then
-    rm -f -- "${ALERTING_LEGACY_ENV}"
-    printf 'Removed legacy environment file %s.\n' "${ALERTING_LEGACY_ENV}"
-  fi
-}
-
 install_runtime() {
   install -D -m 0755 -o root -g root \
     "${REPO_ROOT}/infra/runtime/alerting/alerting.sh" \
@@ -244,7 +236,6 @@ main() {
     pcp-service-check.timer \
     pcp-cert-check.timer \
     pcp-heartbeat.timer
-  remove_legacy_env
 
   printf 'Alert delivery installed.\n'
   printf 'Run a test: sudo systemctl start pcp-alert-notify@test.service\n'

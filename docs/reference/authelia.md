@@ -166,7 +166,6 @@ The script performs these actions:
 - Materializes `/run/authelia/env` from OCI Vault and verifies its owner, mode, and keys.
 - Installs `/etc/authelia/configuration.yml` and preserves `/data/authelia/config/configuration.yml`.
 - Creates the admin user when `users_database.yaml` is absent.
-- Migrates `db.sqlite3`, `storage.sqlite`, or `storage.sqlite3` to `authelia.sqlite3`.
 - Installs the Quadlet unit, validates the configuration, restarts the service, and checks `/api/health`.
 
 Set `ADMIN_EMAIL` and either `AUTHELIA_ADMIN_PASSWORD` or `AUTHELIA_ADMIN_SECRET_OCID` for a first bootstrap. Set `AUTHELIA_JWT_SECRET_OCID`, `AUTHELIA_SESSION_SECRET_OCID`, and `AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID` to create or replace the Vault reference. When `/etc/authelia/configuration.yml` is absent, set `DOMAIN` so the script can render `infra/configs/authelia/configuration.yml`.
