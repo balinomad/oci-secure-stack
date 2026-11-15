@@ -348,6 +348,103 @@ check_body() {
   check_links "${path}" "${start}" "${root}"
 }
 
+check_line_references() {
+  local path="$1"
+  local start="$2"
+  local root="$3"
+  local -a lines=()
+  local i
+  local line
+  local fence_char=""
+  local fence_length=0
+  local fence_re='^(`{3,}|~{3,})'
+  # shellcheck disable=SC2016  # regex literal; no shell expansion intended
+  local inline_re='`[^`]+`'
+  local span
+  local reference
+  local file
+  local spec
+  local resolved
+  local total
+  local -a ranges=()
+  local range
+  local first
+  local last
+
+  mapfile -t lines < "${path}"
+
+  for ((i = start; i < ${#lines[@]}; i++)); do
+    line="${lines[i]}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+
+    if [[ -z "${fence_char}" ]]; then
+      if [[ "${line}" =~ ${fence_re} ]]; then
+        fence_char="${BASH_REMATCH[1]:0:1}"
+        fence_length=${#BASH_REMATCH[1]}
+        continue
+      fi
+    else
+      if [[ "${line}" =~ ${fence_re} ]]; then
+        span="${BASH_REMATCH[1]}"
+        if [[ "${span:0:1}" == "${fence_char}" ]] \
+          && (( ${#span} >= fence_length )); then
+          fence_char=""
+          fence_length=0
+        fi
+      fi
+      continue
+    fi
+
+    while [[ "${line}" =~ ${inline_re} ]]; do
+      span="${BASH_REMATCH[0]}"
+      reference="${span:1:${#span}-2}"
+      line="${line#*"${span}"}"
+
+      if [[ ! "${reference}" =~ ^([^:]+):([0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*)$ ]]; then
+        continue
+      fi
+      file="${BASH_REMATCH[1]}"
+      spec="${BASH_REMATCH[2]}"
+
+      case "${file}" in
+        docs/*|infra/*|tools/*|.env*|README.md|CONTRIBUTING.md|SECURITY.md|CHANGELOG.md)
+          ;;
+        *)
+          continue
+          ;;
+      esac
+
+      resolved=""
+      if [[ -f "${root}/${file}" ]]; then
+        resolved="${root}/${file}"
+      elif [[ -f "$(dirname -- "${path}")/${file}" ]]; then
+        resolved="$(dirname -- "${path}")/${file}"
+      else
+        add_error "${path}" "$((i + 1))" "line reference target not found: ${reference}"
+        continue
+      fi
+
+      total=$(awk 'END { print NR }' "${resolved}")
+      IFS=',' read -ra ranges <<< "${spec}"
+      for range in "${ranges[@]}"; do
+        if [[ "${range}" == *-* ]]; then
+          first="${range%-*}"
+          last="${range#*-}"
+        else
+          first="${range}"
+          last="${range}"
+        fi
+        if (( 10#${first} < 1 || 10#${last} < 10#${first} || 10#${last} > total )); then
+          add_error "${path}" "$((i + 1))" \
+            "line reference out of range: ${reference} (file has ${total} lines)"
+          break
+        fi
+      done
+    done
+  done
+}
+
 audit_file() {
   local path="$1"
   local root="$2"
@@ -360,6 +457,7 @@ audit_file() {
   parse_frontmatter "${path}"
   if (( BODY_START >= 0 )); then
     check_body "${path}" "${BODY_START}" "${root}"
+    check_line_references "${path}" "${BODY_START}" "${root}"
   fi
 }
 
