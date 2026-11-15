@@ -178,6 +178,7 @@ header "4. Service Health"
 
 SERVICES=(
   "stack-secrets-traefik.service"
+  "stack-secrets-authelia.service"
   "stack-secrets-alerting.service"
   "traefik.service"
   "wg-easy.service"
@@ -244,6 +245,12 @@ if [[ -n "$AUTHELIA_UID" ]]; then
 
   if [[ -f "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container" ]]; then
     pass "authelia Quadlet unit is installed under the user directory"
+    if grep -q '^EnvironmentFile=/run/authelia/env$' \
+      "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container"; then
+      pass "authelia Quadlet unit reads /run/authelia/env"
+    else
+      fail "authelia Quadlet unit does not read /run/authelia/env"
+    fi
   else
     fail "authelia Quadlet unit is missing"
   fi
@@ -254,6 +261,19 @@ if [[ -n "$AUTHELIA_UID" ]]; then
     pass "authelia image is pinned by digest"
   else
     fail "authelia image is not pinned by digest"
+  fi
+
+  RUNTIME_DROPIN="/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container.d/20-runtime.conf"
+  RUNTIME_DROPIN_OK=1
+  for setting in PUID PGID UMASK; do
+    if ! grep -q "^Environment=${setting}=" "$RUNTIME_DROPIN" 2>/dev/null; then
+      RUNTIME_DROPIN_OK=0
+    fi
+  done
+  if [[ "$RUNTIME_DROPIN_OK" == "1" ]]; then
+    pass "authelia runtime settings drop-in is installed"
+  else
+    fail "authelia runtime settings drop-in is missing or incomplete"
   fi
 else
   fail "authelia user does not exist"
@@ -489,7 +509,7 @@ else
   fail "Secret reference directory is missing at /etc/secure-stack/secret-refs"
 fi
 
-for ref in traefik alerting grafana; do
+for ref in traefik authelia alerting grafana; do
   if [[ "$ref" == "grafana" ]] \
     && ! systemctl list-unit-files --no-legend grafana-server.service \
       2>/dev/null | grep -q '^grafana-server.service'; then
@@ -532,6 +552,33 @@ if [[ -f /run/traefik/env ]]; then
   fi
 else
   fail "Traefik runtime environment is missing at /run/traefik/env"
+fi
+
+if [[ -f /run/authelia/env ]]; then
+  AUTHELIA_ENV_OWNER=$(stat -c %U /run/authelia/env 2>/dev/null || true)
+  AUTHELIA_ENV_MODE=$(stat -c %a /run/authelia/env 2>/dev/null || true)
+  if [[ "$AUTHELIA_ENV_OWNER" == "authelia" && "$AUTHELIA_ENV_MODE" == "600" ]]; then
+    pass "Authelia runtime environment is owned by authelia with mode 600"
+  else
+    fail "Authelia runtime environment ownership or mode is wrong (${AUTHELIA_ENV_OWNER:-missing}:${AUTHELIA_ENV_MODE:-missing})"
+  fi
+  if grep -Eq '=ocid1\.' /run/authelia/env; then
+    fail "Authelia runtime environment contains an OCID instead of a value"
+  else
+    pass "Authelia runtime environment contains resolved values"
+  fi
+  for key in \
+    AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET \
+    AUTHELIA_SESSION_SECRET \
+    AUTHELIA_STORAGE_ENCRYPTION_KEY; do
+    if grep -q "^${key}=." /run/authelia/env; then
+      pass "Authelia runtime environment contains ${key}"
+    else
+      fail "Authelia runtime environment is missing ${key}"
+    fi
+  done
+else
+  fail "Authelia runtime environment is missing at /run/authelia/env"
 fi
 
 for legacy in \

@@ -15,7 +15,7 @@
 #   3. Run:
 #        export $(cat .env | xargs)
 #        tools/render-config.sh \
-#          | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
+#          | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${AUTHELIA_JWT_SECRET_OCID} ${AUTHELIA_SESSION_SECRET_OCID} ${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
 #          > cloud-config.yaml
 #   4. Use cloud-config.yaml as instance user data
 #   5. Do not commit .env or cloud-config.yaml to version control
@@ -35,14 +35,17 @@
 #   - Instance Principal IAM policy granting read on secret-family
 #     in the Vault compartment
 #
-#   OCI Vault (five mandatory secrets, one optional):
-#   - Secret name: traefik-cloudflare-token  → Cloudflare DNS API token
-#   - Secret name: authelia-admin-password   → Authelia admin password
-#   - Secret name: wg-easy-admin-password    → wg-easy admin password
-#   - Secret name: grafana-admin-password    → Grafana admin password
+#   OCI Vault (eight mandatory secrets, one optional):
+#   - Secret name: traefik-cloudflare-token      → Cloudflare DNS API token
+#   - Secret name: authelia-admin-password       → Authelia admin password
+#   - Secret name: authelia-jwt-secret           → Authelia JWT secret
+#   - Secret name: authelia-session-secret       → Authelia session secret
+#   - Secret name: authelia-storage-encryption-key → Authelia storage encryption key
+#   - Secret name: wg-easy-admin-password        → wg-easy admin password
+#   - Secret name: grafana-admin-password        → Grafana admin password
 #     Required when MONITORING_PROFILE is live or history.
-#   - Secret name: alert-webhook-url          → HTTPS alert webhook
-#   - Secret name: alert-heartbeat-url        → External heartbeat URL
+#   - Secret name: alert-webhook-url              → HTTPS alert webhook
+#   - Secret name: alert-heartbeat-url            → External heartbeat URL
 #   See docs/guides/getting-started.md section 4 for setup steps.
 #
 #   Monitoring profiles:
@@ -300,6 +303,12 @@ runcmd:
       echo "ERROR: AUTH_SECRET_OCID is required" >&2
       exit 1
     fi
+    if [ -z "${AUTHELIA_JWT_SECRET_OCID}" ] || \
+       [ -z "${AUTHELIA_SESSION_SECRET_OCID}" ] || \
+       [ -z "${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID}" ]; then
+      echo "ERROR: AUTHELIA_JWT_SECRET_OCID, AUTHELIA_SESSION_SECRET_OCID, and AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID are required" >&2
+      exit 1
+    fi
     if [ -z "${WG_SECRET_OCID}" ]; then
       echo "ERROR: WG_SECRET_OCID is required" >&2
       exit 1
@@ -335,6 +344,14 @@ runcmd:
     umask 077
     printf 'CF_DNS_API_TOKEN=%s\n' "${CF_SECRET_OCID}" \
       > /etc/secure-stack/secret-refs/traefik.env
+    printf 'AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=%s\n' \
+      "${AUTHELIA_JWT_SECRET_OCID}" \
+      > /etc/secure-stack/secret-refs/authelia.env
+    printf 'AUTHELIA_SESSION_SECRET=%s\n' "${AUTHELIA_SESSION_SECRET_OCID}" \
+      >> /etc/secure-stack/secret-refs/authelia.env
+    printf 'AUTHELIA_STORAGE_ENCRYPTION_KEY=%s\n' \
+      "${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID}" \
+      >> /etc/secure-stack/secret-refs/authelia.env
     printf 'ALERT_WEBHOOK_URL=%s\n' "${ALERT_WEBHOOK_SECRET_OCID}" \
       > /etc/secure-stack/secret-refs/alerting.env
     printf 'ALERT_HEARTBEAT_URL=%s\n' "${ALERT_HEARTBEAT_SECRET_OCID}" \
@@ -411,29 +428,9 @@ runcmd:
     set -e
     . /etc/secure-stack/images.env
     AUTHELIA_UID=$(id -u authelia)
-    AUTHELIA_GID=$(id -g authelia)
 
-    # Generate and persist secrets on first run only
-    if [ ! -f /data/authelia/env ]; then
-      JWT_SECRET=$(openssl rand -hex 32)
-      SESSION_SECRET=$(openssl rand -hex 32)
-      STORAGE_ENCRYPTION_KEY=$(openssl rand -hex 32)
-      {
-        echo "AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${JWT_SECRET}"
-        echo "AUTHELIA_SESSION_SECRET=${SESSION_SECRET}"
-        echo "AUTHELIA_STORAGE_ENCRYPTION_KEY=${STORAGE_ENCRYPTION_KEY}"
-      } > /data/authelia/env
-    fi
-    if ! grep -q '^AUTHELIA_STORAGE_ENCRYPTION_KEY=' /data/authelia/env; then
-      printf 'AUTHELIA_STORAGE_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)" >> /data/authelia/env
-    fi
-    if ! grep -q '^PUID=' /data/authelia/env; then
-      printf 'PUID=%s\nPGID=%s\n' "$AUTHELIA_UID" "$AUTHELIA_GID" >> /data/authelia/env
-    fi
-    if ! grep -q '^UMASK=' /data/authelia/env; then
-      echo 'UMASK=0077' >> /data/authelia/env
-    fi
-    chmod 600 /data/authelia/env
+    # Keep /data/authelia/env unchanged. It is the rollback source until the
+    # Vault-backed runtime path has one successful boot and health check.
 
     # Copy configuration template on first run only
     if [ ! -f /data/authelia/config/configuration.yml ]; then
@@ -533,6 +530,7 @@ runcmd:
   - |
     set -e
     AUTHELIA_UID=$(id -u authelia)
+    AUTHELIA_GID=$(id -g authelia)
     install -d -m 0755 "/etc/containers/systemd/users/${AUTHELIA_UID}"
     install -m 0644 /etc/authelia/authelia.container \
       "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container"
@@ -541,7 +539,34 @@ runcmd:
       "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container.d"
     printf 'Image=%s\n' "$AUTHELIA_IMAGE" \
       > "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container.d/10-image.conf"
+    printf '[Container]\nEnvironment=PUID=%s\nEnvironment=PGID=%s\nEnvironment=UMASK=0077\n' \
+      "$AUTHELIA_UID" "$AUTHELIA_GID" \
+      > "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container.d/20-runtime.conf"
+    chmod 0644 \
+      "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container.d/10-image.conf" \
+      "/etc/containers/systemd/users/${AUTHELIA_UID}/authelia.container.d/20-runtime.conf"
     systemctl daemon-reload
+    systemctl enable --now stack-secrets-authelia.service
+    for _ in $(seq 1 120); do
+      [ -s /run/authelia/env ] && break
+      sleep 1
+    done
+    if [ ! -s /run/authelia/env ]; then
+      echo "ERROR: Authelia runtime secrets were not materialized" >&2
+      exit 1
+    fi
+    if [ -f /data/authelia/env ] && \
+       grep -q '^AUTHELIA_STORAGE_ENCRYPTION_KEY=' /data/authelia/env; then
+      LEGACY_STORAGE_KEY=$(grep -m1 '^AUTHELIA_STORAGE_ENCRYPTION_KEY=' \
+        /data/authelia/env | cut -d= -f2-)
+      RUNTIME_STORAGE_KEY=$(grep -m1 '^AUTHELIA_STORAGE_ENCRYPTION_KEY=' \
+        /run/authelia/env | cut -d= -f2-)
+      if [ -z "$LEGACY_STORAGE_KEY" ] || \
+         [ "$LEGACY_STORAGE_KEY" != "$RUNTIME_STORAGE_KEY" ]; then
+        echo "ERROR: Vault storage encryption key does not match /data/authelia/env" >&2
+        exit 1
+      fi
+    fi
     runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
       systemctl --user daemon-reload
     runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \

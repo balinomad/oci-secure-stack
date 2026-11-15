@@ -6,7 +6,7 @@ ContainerName=authelia
 # The deployment overrides this image with the locked digest.
 Image=authelia/authelia:4.39
 PublishPort=127.0.0.1:9091:9091
-EnvironmentFile=/data/authelia/env
+EnvironmentFile=/run/authelia/env
 Volume=/data/authelia/config:/config:Z
 Volume=/data/authelia/db:/data:Z
 UserNS=keep-id
@@ -18,6 +18,7 @@ Exec=authelia --config /config/configuration.yml
 Restart=always
 TimeoutStartSec=300
 ExecStartPre=/bin/sh -c 'for _ in $(/usr/bin/seq 1 90); do /usr/bin/mountpoint -q /data && exit 0; sleep 2; done; exit 1'
+ExecStartPre=/bin/sh -c 'for _ in $(/usr/bin/seq 1 120); do [ -s /run/authelia/env ] && exit 0; sleep 1; done; exit 1'
 
 [Install]
 WantedBy=default.target

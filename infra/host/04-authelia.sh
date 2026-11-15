@@ -9,7 +9,11 @@ readonly REPO_ROOT
 readonly AUTHELIA_USER="authelia"
 AUTHELIA_IMAGE=""
 readonly AUTHELIA_SUBID_RANGE="400000-465535"
-readonly ENV_FILE="/data/authelia/env"
+readonly RUNTIME_ENV_FILE="/run/authelia/env"
+readonly SECRET_REF_DIR="/etc/secure-stack/secret-refs"
+readonly AUTHELIA_SECRET_REF="${SECRET_REF_DIR}/authelia.env"
+readonly AUTHELIA_SECRET_UNIT="/etc/systemd/system/stack-secrets-authelia.service"
+readonly SECRET_HELPER="/usr/local/libexec/stack-secret-env"
 readonly CONFIG_DIR="/data/authelia/config"
 readonly DB_DIR="/data/authelia/db"
 readonly STAGED_CONFIG="/etc/authelia/configuration.yml"
@@ -26,17 +30,23 @@ Usage: 04-authelia.sh [--update-config]
 
 Install or repair the rootless Authelia service from a repository checkout.
 The script is idempotent. It creates the service user, subordinate ID range,
-lingering, directories, environment file, configuration, user database, and
-Quadlet unit, then validates and starts the service.
+lingering, directories, Vault secret reference, configuration, user database,
+and Quadlet unit, then materializes the runtime secrets, validates, and starts
+the service.
 
 The runtime configuration at /data/authelia/config/configuration.yml is
-preserved unless --update-config is given.
+preserved unless --update-config is given. The legacy file /data/authelia/env
+is not modified.
 
 Environment:
-  DOMAIN                       Required when /etc/authelia/configuration.yml is absent.
-  ADMIN_EMAIL                  Required when users_database.yaml is absent.
-  AUTHELIA_ADMIN_PASSWORD      Admin password for first bootstrap.
-  AUTHELIA_ADMIN_SECRET_OCID   OCI Vault secret OCID for the admin password.
+  DOMAIN                                  Required when /etc/authelia/configuration.yml is absent.
+  ADMIN_EMAIL                             Required when users_database.yaml is absent.
+  AUTHELIA_ADMIN_PASSWORD                 Admin password for first bootstrap.
+  AUTHELIA_ADMIN_SECRET_OCID              OCI Vault secret OCID for the admin password.
+  AUTHELIA_JWT_SECRET_OCID                OCI Vault secret OCID for the JWT secret.
+  AUTHELIA_SESSION_SECRET_OCID            OCI Vault secret OCID for the session secret.
+  AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID    OCI Vault secret OCID for the storage encryption key.
+                                          The three secret OCIDs are required when the reference file is absent.
 USAGE
 }
 
@@ -60,7 +70,8 @@ require_root() {
 require_commands() {
   local command
   for command in install systemctl loginctl useradd groupadd usermod getent \
-    runuser podman curl openssl sed grep awk mktemp mountpoint date sleep base64; do
+    runuser podman curl sed grep awk cut mktemp mountpoint stat date sleep \
+    base64 oci; do
     if ! command -v "${command}" >/dev/null 2>&1; then
       err "required command not found: ${command}"
       exit 1
@@ -153,47 +164,123 @@ ensure_dirs() {
     /data/authelia "${CONFIG_DIR}" "${DB_DIR}"
 }
 
-ensure_env() {
-  local uid
-  local gid
+install_secret_support() {
+  install -d -m 0700 -o root -g root "${SECRET_REF_DIR}"
+  install -D -m 0755 -o root -g root \
+    "${REPO_ROOT}/infra/runtime/secrets/materialize.sh" "${SECRET_HELPER}"
+  install -D -m 0644 -o root -g root \
+    "${REPO_ROOT}/infra/configs/systemd/stack-secrets-authelia.service" \
+    "${AUTHELIA_SECRET_UNIT}"
+  if command -v restorecon >/dev/null 2>&1; then
+    restorecon -F "${SECRET_HELPER}" "${AUTHELIA_SECRET_UNIT}"
+  fi
+}
+
+ensure_secret_ref() {
+  local jwt_ocid="${AUTHELIA_JWT_SECRET_OCID:-}"
+  local session_ocid="${AUTHELIA_SESSION_SECRET_OCID:-}"
+  local storage_ocid="${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID:-}"
   local key
-  local value
+  local ocid
 
-  uid="$(id -u "${AUTHELIA_USER}")"
-  gid="$(id -g "${AUTHELIA_USER}")"
-  umask 077
-
-  if [[ ! -f "${ENV_FILE}" ]]; then
+  if [[ -n "${jwt_ocid}" || -n "${session_ocid}" || -n "${storage_ocid}" ]]; then
+    if [[ -z "${jwt_ocid}" || -z "${session_ocid}" || -z "${storage_ocid}" ]]; then
+      err "set all three Authelia secret OCIDs or none"
+      exit 1
+    fi
+    for ocid in "${jwt_ocid}" "${session_ocid}" "${storage_ocid}"; do
+      if [[ "${ocid}" != ocid1.* ]]; then
+        err "Authelia secret OCIDs must use ocid1. form"
+        exit 1
+      fi
+    done
+    umask 077
     {
-      printf 'AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=%s\n' \
-        "$(openssl rand -hex 32)"
-      printf 'AUTHELIA_SESSION_SECRET=%s\n' "$(openssl rand -hex 32)"
-      printf 'AUTHELIA_STORAGE_ENCRYPTION_KEY=%s\n' "$(openssl rand -hex 32)"
-    } > "${ENV_FILE}"
+      printf '%s=%s\n' \
+        "AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET" "${jwt_ocid}"
+      printf 'AUTHELIA_SESSION_SECRET=%s\n' "${session_ocid}"
+      printf 'AUTHELIA_STORAGE_ENCRYPTION_KEY=%s\n' "${storage_ocid}"
+    } > "${AUTHELIA_SECRET_REF}"
+  elif [[ ! -s "${AUTHELIA_SECRET_REF}" ]]; then
+    err "set all three Authelia secret OCIDs or provide ${AUTHELIA_SECRET_REF}"
+    exit 1
+  fi
+
+  chown root:root "${AUTHELIA_SECRET_REF}"
+  chmod 0600 "${AUTHELIA_SECRET_REF}"
+
+  for key in \
+    AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET \
+    AUTHELIA_SESSION_SECRET \
+    AUTHELIA_STORAGE_ENCRYPTION_KEY; do
+    if ! grep -q "^${key}=ocid1\." "${AUTHELIA_SECRET_REF}"; then
+      err "${AUTHELIA_SECRET_REF} is missing an OCID for ${key}"
+      exit 1
+    fi
+  done
+}
+
+materialize_secrets() {
+  local key
+  local owner
+  local mode
+
+  systemctl daemon-reload
+  systemctl enable stack-secrets-authelia.service
+  systemctl restart stack-secrets-authelia.service
+
+  if [[ ! -s "${RUNTIME_ENV_FILE}" ]]; then
+    err "runtime secret file is missing or empty: ${RUNTIME_ENV_FILE}"
+    exit 1
+  fi
+
+  owner="$(stat -c '%U' "${RUNTIME_ENV_FILE}")"
+  mode="$(stat -c '%a' "${RUNTIME_ENV_FILE}")"
+  if [[ "${owner}" != "${AUTHELIA_USER}" || "${mode}" != "600" ]]; then
+    err "${RUNTIME_ENV_FILE} must be owned by ${AUTHELIA_USER} with mode 600"
+    exit 1
+  fi
+  if grep -q '=ocid1\.' "${RUNTIME_ENV_FILE}"; then
+    err "${RUNTIME_ENV_FILE} contains an OCID instead of a value"
+    exit 1
   fi
 
   for key in \
     AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET \
     AUTHELIA_SESSION_SECRET \
     AUTHELIA_STORAGE_ENCRYPTION_KEY; do
-    if ! grep -q "^${key}=." "${ENV_FILE}"; then
-      value="$(openssl rand -hex 32)"
-      printf '%s=%s\n' "${key}" "${value}" >> "${ENV_FILE}"
+    if ! grep -q "^${key}=." "${RUNTIME_ENV_FILE}"; then
+      err "${RUNTIME_ENV_FILE} is missing ${key}"
+      exit 1
     fi
   done
+}
 
-  if ! grep -q '^PUID=' "${ENV_FILE}"; then
-    printf 'PUID=%s\n' "${uid}" >> "${ENV_FILE}"
+verify_storage_key() {
+  local legacy_key
+  local runtime_key
+
+  if [[ ! -f /data/authelia/env ]]; then
+    return 0
   fi
-  if ! grep -q '^PGID=' "${ENV_FILE}"; then
-    printf 'PGID=%s\n' "${gid}" >> "${ENV_FILE}"
-  fi
-  if ! grep -q '^UMASK=' "${ENV_FILE}"; then
-    printf 'UMASK=0077\n' >> "${ENV_FILE}"
+  if ! grep -q '^AUTHELIA_STORAGE_ENCRYPTION_KEY=' /data/authelia/env; then
+    return 0
   fi
 
-  chown "${AUTHELIA_USER}:${AUTHELIA_USER}" "${ENV_FILE}"
-  chmod 0600 "${ENV_FILE}"
+  legacy_key="$(grep -m1 '^AUTHELIA_STORAGE_ENCRYPTION_KEY=' \
+    /data/authelia/env | cut -d= -f2-)"
+  runtime_key="$(grep -m1 '^AUTHELIA_STORAGE_ENCRYPTION_KEY=' \
+    "${RUNTIME_ENV_FILE}" | cut -d= -f2-)"
+
+  if [[ -z "${legacy_key}" || -z "${runtime_key}" ]]; then
+    err "cannot compare the Authelia storage encryption key"
+    exit 1
+  fi
+  if [[ "${legacy_key}" != "${runtime_key}" ]]; then
+    err "the Vault storage encryption key does not match /data/authelia/env"
+    err "restore the Vault secret to the existing key, or re-encrypt the database first"
+    exit 1
+  fi
 }
 
 install_config() {
@@ -378,9 +465,11 @@ migrate_database() {
 
 install_unit() {
   local uid
+  local gid
   local unit_dir
 
   uid="$(id -u "${AUTHELIA_USER}")"
+  gid="$(id -g "${AUTHELIA_USER}")"
   unit_dir="/etc/containers/systemd/users/${uid}"
 
   install -D -m 0644 -o root -g root \
@@ -392,6 +481,9 @@ install_unit() {
   printf 'Image=%s\n' "${AUTHELIA_IMAGE}" \
     > "${unit_dir}/authelia.container.d/10-image.conf"
   chmod 0644 "${unit_dir}/authelia.container.d/10-image.conf"
+  printf '[Container]\nEnvironment=PUID=%s\nEnvironment=PGID=%s\nEnvironment=UMASK=0077\n' \
+    "${uid}" "${gid}" > "${unit_dir}/authelia.container.d/20-runtime.conf"
+  chmod 0644 "${unit_dir}/authelia.container.d/20-runtime.conf"
 }
 
 configure_selinux() {
@@ -407,12 +499,20 @@ configure_selinux() {
 fix_ownership() {
   chown -R "${AUTHELIA_USER}:${AUTHELIA_USER}" /data/authelia
   chmod 0700 /data/authelia "${CONFIG_DIR}" "${DB_DIR}"
-  chmod 0600 "${ENV_FILE}" "${RUNTIME_CONFIG}" "${USERS_FILE}"
+  chmod 0600 "${RUNTIME_CONFIG}" "${USERS_FILE}"
 }
 
 validate_config() {
+  local uid
+  local gid
+
+  uid="$(id -u "${AUTHELIA_USER}")"
+  gid="$(id -g "${AUTHELIA_USER}")"
   run_as_authelia podman run --rm \
-    --env-file "${ENV_FILE}" \
+    --env-file "${RUNTIME_ENV_FILE}" \
+    --env "PUID=${uid}" \
+    --env "PGID=${gid}" \
+    --env "UMASK=0077" \
     -v "${CONFIG_DIR}:/config:Z" \
     -v "${DB_DIR}:/data:Z" \
     "${AUTHELIA_IMAGE}" \
@@ -471,11 +571,14 @@ main() {
   enable_linger
   ensure_dirs
   ensure_image
-  ensure_env
+  install_secret_support
+  ensure_secret_ref
   install_config
   ensure_users_database
   install_unit
   stop_service
+  materialize_secrets
+  verify_storage_key
   migrate_database
   configure_selinux
   fix_ownership

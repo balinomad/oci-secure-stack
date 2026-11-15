@@ -87,17 +87,19 @@ components:
         target: /etc/authelia/authelia.container
         owner: root:root
         mode: "0644"
+      - source: infra/configs/systemd/stack-secrets-authelia.service
+        target: /etc/systemd/system/stack-secrets-authelia.service
+        owner: root:root
+        mode: "0644"
     secrets:
-      - target: /data/authelia/env
+      - target: /run/authelia/env
         owner: authelia:authelia
         mode: "0600"
+        reference: /etc/secure-stack/secret-refs/authelia.env
         keys:
           - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET
           - AUTHELIA_SESSION_SECRET
           - AUTHELIA_STORAGE_ENCRYPTION_KEY
-          - PUID
-          - PGID
-          - UMASK
 
   cockpit:
     version: "unpinned"
