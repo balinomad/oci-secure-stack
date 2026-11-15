@@ -3,8 +3,8 @@ name: "ADR-008: Traefik Runtime"
 description: |
   Decision to run Traefik as a native binary under a hardened systemd unit instead of a container.
 status: draft
-version: 1.2
-updated: 2026-11-14
+version: 1.3
+updated: 2026-11-15
 ---
 
 # ADR-008: Traefik Runtime
@@ -15,7 +15,8 @@ The edge router binds privileged ports 80 and 443. A rootless container would re
 
 ## Affected paths
 
-- `infra/cloud-init/cloud-config.template.yaml:95-130,809`
+- `infra/cloud-init/cloud-config.template.yaml:578-608`
+- `infra/configs/traefik/traefik.yml:1-48`
 - `docs/reference/traefik.md:12-80`
 
 ## Current text or behavior
@@ -59,5 +60,6 @@ Adopt option 1.
 
 ## References
 
-- `tmp/unverified/component-research.md`
+- `docs/reference/traefik.md:14-93`
+- `docs/architecture.md:164`
 - `docs/decisions/001-exposure-model.md`

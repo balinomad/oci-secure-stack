@@ -3,8 +3,8 @@ name: "ADR-007: OCI Provisioning Method"
 description: |
   Decision on whether OCI prerequisites are manual or Terraform-managed.
 status: draft
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-14
 ---
 
 # ADR-007: OCI Provisioning Method
@@ -21,11 +21,11 @@ The OCI network, block volume, Vault secrets, and DNS records must exist before 
 
 ## Current text or behavior
 
-The OCI network, block volume, Vault secrets, and DNS records are manual prerequisites. The repository has no Terraform for OCI infrastructure, Vault, IAM, or DNS.
+The OCI network, block volume, Vault secrets, and DNS records are manual prerequisites for this repository. Terraform for OCI infrastructure is part of v1.0. This repository contains no Terraform. Coverage of Vault, IAM, and DNS is unverified.
 
 ## Contradiction
 
-The reproducible-deployment goal requires infrastructure as code. The prerequisites are manual and can drift.
+The reproducible-deployment goal requires infrastructure as code. This repository does not implement OCI provisioning as code, so reproducibility is unproven.
 
 ## Options
 
@@ -41,23 +41,20 @@ The reproducible-deployment goal requires infrastructure as code. The prerequisi
 
 ## Recommendation
 
-Adopt option 3.
-
-## Open question
-
-Are OCI prerequisites manual or Terraform-managed?
-
-Recommended default: manual for v1, Terraform as v1.1.
-
-Trade-off if reversed: manual creates drift and weakens the reproducible-deployment goal.
+Adopt option 2.
 
 ## Decision
 
-Not decided.
+1. Terraform for OCI infrastructure is part of v1.0.
+2. This repository remains infrastructure-only and contains no Terraform.
+3. The Terraform implementation must cover the OCI network, block volume, Vault secrets, IAM, and DNS prerequisites before F21 can be closed.
 
 ## Consequences
 
-Not determined until the open question is resolved.
+- OCI prerequisites are managed as code.
+- This repository remains infrastructure-only.
+- F21 remains open until the Terraform coverage is verified.
+- The Terraform state and provider versions require governance.
 
 ## References
 

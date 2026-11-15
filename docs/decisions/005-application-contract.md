@@ -3,8 +3,8 @@ name: "ADR-005: Application Container Contract"
 description: |
   Decision to run application containers rootless under dedicated users, with restricted volumes, minimal capabilities, and non-world-readable secrets.
 status: draft
-version: 1.2
-updated: 2026-11-14
+version: 1.3
+updated: 2026-11-15
 ---
 
 # ADR-005: Application Container Contract
@@ -61,5 +61,6 @@ Adopt option 2.
 
 ## References
 
-- `tmp/unverified/component-research.md`
+- `docs/guides/adding-apps.md:16-176`
+- `docs/architecture.md:95`
 - `docs/process/issue-log.md` F11, F13

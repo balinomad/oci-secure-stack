@@ -3,8 +3,8 @@ name: "ADR-002: Authelia Runtime and File Ownership"
 description: |
   Decision to run Authelia as a rootless Podman container under a dedicated user with persistent state on the data volume.
 status: draft
-version: 1.2
-updated: 2026-11-14
+version: 1.3
+updated: 2026-11-15
 ---
 
 # ADR-002: Authelia Runtime and File Ownership
@@ -68,6 +68,7 @@ Adopt option 2.
 
 ## References
 
-- `tmp/unverified/component-research.md`
+- `docs/reference/authelia.md:45-64,84,95-96`
+- `docs/guides/adding-apps.md:337`
 - `docs/process/issue-log.md` F1
 - `docs/decisions/009-infrastructure-container-runtime.md`
