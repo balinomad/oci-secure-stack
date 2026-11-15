@@ -3,19 +3,13 @@ name: "OCI Secure Stack Delivery Plan"
 description: |
   Decision-first plan for resuming work, with phases, tasks, gates, estimates, and immediate next actions.
 status: active
-version: 1.6
+version: 1.7
 updated: 2026-11-15
 ---
 
 # OCI Secure Stack Delivery Plan
 
-## Correction to the earlier recommendation
-
-The first assessment recommended proving a deployment before further design work. That order is wrong for this project.
-
-The current implementation contradicts at least six strategic decisions. Deploying it first would test a contract nobody has confirmed. It would also produce findings against a design that is about to change.
-
-Revised order:
+## Execution order
 
 1. Establish goals and decision authority.
 2. Freeze the decisions that block implementation.
@@ -24,8 +18,6 @@ Revised order:
 5. Refactor structure.
 6. Write documentation from tested behaviour.
 7. Cut over to production.
-
-The implementation remains the evidence source, but it is not the contract.
 
 ## Principles
 
@@ -48,10 +40,9 @@ Goal: make goals and decisions explicit, tracked, and coherent.
 - [x] A6 Write ADR-003 metrics architecture: PCP export or Traefik only. (draft)
 - [x] A7 Write ADR-004 persistence and mount failure policy. (draft)
 - [x] A8 Write ADR-005 application container contract and secret handling. (draft)
-- [ ] A9 Write ADR-006 backup and recovery scope.
-- [ ] A10 Write ADR-007 OCI provisioning method: manual or Terraform.
+- [x] A9 Write ADR-006 backup and recovery scope.
+- [x] A10 Write ADR-007 OCI provisioning method: manual or Terraform.
 - [x] A10a Write ADR-008 Traefik runtime. (draft)
-- [ ] A11 Migrate legacy documents into the project and process layers. Delete the legacy tree only after every section is verified.
 - [x] A12 Write ADR-011 alert delivery. (draft)
 
 Gate GA: every goal has a named maintainer, a testable criterion, and no unresolved contradiction. No implementation work starts before this gate.
@@ -94,13 +85,14 @@ Gate GC: static validation green, every P0 finding closed or explicitly deferred
 - [ ] D7 Rerun cloud-init modules and confirm idempotency.
 - [ ] D8 Perform a VM replacement drill with the same block volume.
 - [ ] D9 Perform a backup and restore drill if ADR-006 includes it.
+- [ ] D10 Verify wg-easy `INIT_PASSWORD` is used only on first initialization before moving its environment file to `/run`. This requires a disposable host; none is available in the current environment.
 
 Gate GD: `infra/host/verify-stack.sh` exits 0 and every item in `docs/process/acceptance-criteria.md` is proven.
 
 ## Phase E: Structural refactor (3-5 days)
 
 - [x] E1 Extract configuration into `infra/configs/`. Evidence: `infra/manifest.yaml`, `tools/render-config.sh`.
-- [ ] E2 Populate `infra/host/00-02.sh` and `infra/host/06-wireguard.sh` as idempotent modules.
+- [ ] E2 Populate `infra/host/00-init.sh`, `infra/host/01-oci-vault.sh`, `infra/host/02-podman.sh`, and `infra/host/06-wireguard.sh` as idempotent modules.
 - [ ] E3 Implement Makefile targets: `lint`, `render`, `deploy`, `verify`, `backup`.
 - [x] E4 Convert infrastructure containers to Quadlet per ADR-009.
 - [ ] E5 Clean-room deploy from the refactored tree.
@@ -117,7 +109,6 @@ Gate GE: parity with the Phase D baseline. No regression.
 - [x] F3 Write verification, maintenance, recovery, and troubleshooting into the operations runbook.
 - [x] F4 Remove unproven README claims and add a documentation map.
 - [x] F5 Make the documentation audit and link check pass. `tools/audit-docs.sh` exits 0.
-- [ ] F6 Verify every legacy section maps to a tracked document, then delete the legacy tree.
 
 Gate GF: a new operator can deploy from tracked documentation alone. This gate remains open until Phase D produces deployment evidence.
 

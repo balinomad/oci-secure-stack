@@ -3,8 +3,8 @@ name: "Architecture"
 description: |
   Project purpose, goals, principles, constraints, system architecture, security model, risks, and decision index for the OCI secure stack.
 status: draft
-version: 1.4
-updated: 2026-11-14
+version: 1.6
+updated: 2026-11-15
 ---
 
 # Architecture
@@ -234,22 +234,22 @@ Corporate firewalls and hotels can block outbound UDP on non-standard ports. If 
 
 ### Surface protection
 
-| Surface            | Protection layers                                                                   |
-| ------------------ | ----------------------------------------------------------------------------------- |
-| Traefik dashboard  | Loopback only, accessed through an SSH tunnel                                       |
-| Traefik metrics    | Loopback only, accessed through an SSH tunnel                                       |
-| PCP and Grafana    | Loopback only, accessed through an SSH tunnel; Grafana login                        |
-| Valkey history     | Loopback only; local administration only, history profile                           |
-| Alert delivery     | Outbound HTTPS only; webhook and heartbeat secrets from OCI Vault                   |
-| Cockpit            | VPN subnet, Authelia password plus TOTP, then Cockpit PAM                           |
-| wg-easy            | VPN subnet, Authelia password plus TOTP                                             |
-| Public app routes  | TLS via Let's Encrypt, plus per-application authentication                          |
-| SSH                | Firewall restricted to the admin IP; closed after the first peer is added           |
-| WireGuard          | Curve25519 key exchange; silent to unauthenticated probes                           |
-| Secrets at rest    | OCI Vault, HSM-backed; never written to cloud-init or environment in plaintext      |
-| Secrets in transit | Instance Principal, no stored credentials; Vault API over TLS                       |
-| Filesystem         | SELinux enforcing; Traefik runs as a dedicated system user with minimal write paths |
-| Kernel audit       | `auditd` running; logs to the persistent journal                                    |
+| Surface            | Protection layers                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
+| Traefik dashboard  | Loopback only, accessed through an SSH tunnel                                                         |
+| Traefik metrics    | Loopback only, accessed through an SSH tunnel                                                         |
+| PCP and Grafana    | Loopback only, accessed through an SSH tunnel; Grafana login                                          |
+| Valkey history     | Loopback only; local administration only, history profile                                             |
+| Alert delivery     | Outbound HTTPS only; webhook and heartbeat secrets from OCI Vault                                     |
+| Cockpit            | VPN subnet, Authelia password plus TOTP, then Cockpit PAM                                             |
+| wg-easy            | VPN subnet, Authelia password plus TOTP                                                               |
+| Public app routes  | TLS via Let's Encrypt, plus per-application authentication                                            |
+| SSH                | Firewall restricted to the admin IP; closed after the first peer is added                             |
+| WireGuard          | Curve25519 key exchange; silent to unauthenticated probes                                             |
+| Secrets at rest    | OCI Vault is the only durable source; runtime copies are `/run`, credentials, or a recorded exception |
+| Secrets in transit | Instance Principal, no stored credentials; Vault API over TLS                                         |
+| Filesystem         | SELinux enforcing; Traefik runs as a dedicated system user with minimal write paths                   |
+| Kernel audit       | `auditd` running; logs to the persistent journal                                                      |
 
 ### Threat model
 
@@ -301,8 +301,9 @@ These risks are not confirmed runtime failures until a deployment test produces 
 | ADR-009 | Infrastructure container runtime     | Draft  |
 | ADR-010 | Local monitoring UI and history      | Draft  |
 | ADR-011 | Alert delivery                       | Draft  |
+| ADR-012 | Runtime secret delivery              | Draft  |
 
-ADR-006 and ADR-007 remain draft. ADR-009, ADR-010, and ADR-011 are decided in content and remain draft until committed and confirmed.
+All records remain draft. ADR-006 is unresolved. The other records contain decisions but are not confirmed.
 
 ## Related documents
 

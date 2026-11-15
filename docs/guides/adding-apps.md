@@ -3,8 +3,8 @@ name: "Adding Applications"
 description: |
   How to build, deploy, route, secure, and persist an application container in the OCI secure stack.
 status: draft
-version: 1.3
-updated: 2026-11-14
+version: 1.5
+updated: 2026-11-15
 ---
 
 # Adding Applications
@@ -15,34 +15,34 @@ The stack owns routing, TLS termination, authentication infrastructure, persiste
 
 ## 1. Responsibility boundaries
 
-| Layer                                         | Mandatory            | Optional |
-| --------------------------------------------- | -------------------- | -------- |
-| Podman Quadlet for container lifecycle        | Yes                  | No       |
-| Traefik for HTTP routing and TLS              | Yes                  | No       |
-| `127.0.0.1` network binding                   | Yes                  | No       |
-| `/data/containers/<app>/` for persistent data | Yes                  | No       |
-| Restic backup via `/data/`                    | Yes, automatic       | No       |
-| Authelia for authentication                   | No                   | Yes      |
-| OCI Vault for secrets                         | No                   | Yes      |
-| Stack logging conventions                     | No                   | Yes      |
-| OpenMetrics exposure for PCP ingestion        | Yes, where supported | No       |
+| Layer                                         | Mandatory             | Optional |
+| --------------------------------------------- | --------------------- | -------- |
+| Podman Quadlet for container lifecycle        | Yes                   | No       |
+| Traefik for HTTP routing and TLS              | Yes                   | No       |
+| `127.0.0.1` network binding                   | Yes                   | No       |
+| `/data/containers/<app>/` for persistent data | Yes                   | No       |
+| Backup via `/data/` (planned, ADR-006)        | Yes, when implemented | No       |
+| Authelia for authentication                   | No                    | Yes      |
+| OCI Vault for secrets                         | No                    | Yes      |
+| Stack logging conventions                     | No                    | Yes      |
+| OpenMetrics exposure for PCP ingestion        | Yes, where supported  | No       |
 
-| Concern                       | Stack owns                                        | Application owns                                        |
-| ----------------------------- | ------------------------------------------------- | ------------------------------------------------------- |
-| TLS certificates              | Issuance, renewal, termination                    | Nothing                                                 |
-| HTTP routing                  | Domain assignment, middleware chains              | Route config file in `/etc/traefik/config/`             |
-| Global security headers       | HSTS, `X-Frame-Options`, `X-Content-Type-Options` | Content-Security-Policy                                 |
-| Authentication infrastructure | Authelia SSO                                      | Auth integration choice                                 |
-| Authorization                 | Coarse group-based via Authelia                   | Fine-grained RBAC in the application                    |
-| Container lifecycle           | systemd via Quadlet                               | Image, ports, environment, health                       |
-| Persistent storage            | Block volume mount at `/data/`                    | Directory structure under `/data/containers/<app>/`     |
-| Backup                        | Restic covers all of `/data/`                     | Storing data under `/data/containers/<app>/`            |
-| Secret storage                | OCI Vault infrastructure                          | Creating and referencing application secrets            |
-| Logging infrastructure        | Journal, Traefik access logs                      | Application log output and rotation                     |
-| Monitoring infrastructure     | PCP, `pmproxy`, Grafana, OpenMetrics ingestion    | Exposing a loopback `/metrics` endpoint where supported |
-| OS security                   | SELinux, auditd, firewall                         | `:Z` volume flag, no privileged containers              |
-| Networking                    | Firewall, public port exposure                    | Binding to `127.0.0.1` only                             |
-| VM lifecycle                  | Cloud-init, block volume                          | Nothing                                                 |
+| Concern                       | Stack owns                                                | Application owns                                        |
+| ----------------------------- | --------------------------------------------------------- | ------------------------------------------------------- |
+| TLS certificates              | Issuance, renewal, termination                            | Nothing                                                 |
+| HTTP routing                  | Domain assignment, middleware chains                      | Route config file in `/etc/traefik/config/`             |
+| Global security headers       | HSTS, `X-Frame-Options`, `X-Content-Type-Options`         | Content-Security-Policy                                 |
+| Authentication infrastructure | Authelia SSO                                              | Auth integration choice                                 |
+| Authorization                 | Coarse group-based via Authelia                           | Fine-grained RBAC in the application                    |
+| Container lifecycle           | systemd via Quadlet                                       | Image, ports, environment, health                       |
+| Persistent storage            | Block volume mount at `/data/`                            | Directory structure under `/data/containers/<app>/`     |
+| Backup                        | The backup design covers all of `/data/` when implemented | Storing data under `/data/containers/<app>/`            |
+| Secret storage                | OCI Vault infrastructure                                  | Creating and referencing application secrets            |
+| Logging infrastructure        | Journal, Traefik access logs                              | Application log output and rotation                     |
+| Monitoring infrastructure     | PCP, `pmproxy`, Grafana, OpenMetrics ingestion            | Exposing a loopback `/metrics` endpoint where supported |
+| OS security                   | SELinux, auditd, firewall                                 | `:Z` volume flag, no privileged containers              |
+| Networking                    | Firewall, public port exposure                            | Binding to `127.0.0.1` only                             |
+| VM lifecycle                  | Cloud-init, block volume                                  | Nothing                                                 |
 
 ## 2. Container runtime
 
@@ -63,7 +63,7 @@ Image=<image>:<tag>
 PublishPort=127.0.0.1:<host-port>:<container-port>
 Volume=/data/containers/<app-name>/data:<container-data-path>:Z
 Volume=/data/containers/<app-name>/logs:<container-log-path>:Z
-EnvironmentFile=/data/containers/<app-name>/env
+EnvironmentFile=/run/apps/<app-name>/env
 
 [Service]
 Restart=always
@@ -79,7 +79,8 @@ WantedBy=multi-user.target
 - Never use `--privileged`. Request only the capabilities the container needs with `AddCapability=`.
 - Never bind to `0.0.0.0`. Bind all ports to `127.0.0.1`.
 - Pin image versions. Do not use `:latest` in production.
-- Use `EnvironmentFile=`. Do not embed secrets in the unit file or image.
+- Use `EnvironmentFile=` with a runtime file under `/run/apps/<app-name>/env`. Do not embed secrets in the unit file or image.
+- Use `--secret-env KEY=OCID` for OCI Vault values. Do not pass secrets through `--env`.
 
 ### 2.3 Activation
 
@@ -346,9 +347,10 @@ The block volume is mounted at `/data/` and survives VM termination and redeploy
 /data/containers/<app-name>/
 ├── data/     # primary application data
 ├── logs/     # application log files
-├── config/   # configuration files that change at runtime
-└── env       # environment file with secrets, mode 0600
+└── config/   # configuration files that change at runtime
 ```
+
+Runtime secret environment files live at `/run/apps/<app-name>/env` with mode `0600`. The deploy script recreates them from OCI Vault. They are not on `/data` and are not backed up.
 
 Create the directories before starting the container:
 
@@ -407,35 +409,37 @@ Each container's data lives under the same parent directory:
 3. Use the plain text value as the content.
 4. Copy the secret OCID.
 
-### 8.2 Fetch at boot
+### 8.2 Resolve at deployment
 
-Add a `runcmd` block to `infra/cloud-init/cloud-config.template.yaml` that fetches the secret and writes the application environment file:
+Use `deploy-service.sh --secret-env` for every Vault-backed value:
 
 ```bash
-APP_SECRET=$(oci secrets secret-bundle get \
-  --secret-id <secret-ocid> \
-  --query "data.secretBundleContent.content" \
-  --raw-output | base64 -d)
-
-{
-  echo "DATABASE_URL=postgres://user:${APP_SECRET}@localhost/mydb"
-} >> /data/containers/<app-name>/env
-chmod 600 /data/containers/<app-name>/env
+sudo ./infra/host/deploy-service.sh \
+  --name <app-name> \
+  --image <image>:<tag> \
+  --port <port> \
+  --domain <domain> \
+  --secret-env DATABASE_PASSWORD=ocid1.vaultsecret.example
 ```
+
+The script fetches the value from OCI Vault and writes `/run/apps/<app-name>/env` with mode `0600`. The deployment manifest records `--secret-env DATABASE_PASSWORD=ocid1.vaultsecret.example`, not the value. On VM replacement, the manifest replay fetches the value again.
+
+For a manually managed unit, create the runtime file at boot and reference it with `EnvironmentFile=`. Do not write the value to `/data` or `/etc`.
 
 ### 8.3 Rules
 
 - Never embed secrets in the container image.
 - Never commit secrets to version control.
-- Never write secrets outside `/data/`.
+- Never write secret values to `/data` or `/etc`. Use `/run` or service credentials.
 - Never log secret values.
-- Use Podman secrets or root-only environment files. Do not write secret values into world-readable manifests.
+- Do not pass secrets through `--env`. Use `--secret-env`.
+- Do not write secret values into manifests. Store only OCIDs or references.
 
 ## 9. Logging
 
 ### 9.1 Application logs
 
-Write application logs to `/data/containers/<app-name>/logs/`. This keeps logs across VM replacement and includes them in the Restic backup.
+Write application logs to `/data/containers/<app-name>/logs/`. This keeps logs across VM replacement and within the planned backup scope.
 
 Prefer structured JSON output written to a file. If the application only supports stdout, journald captures it but the log is not backed up:
 
@@ -469,7 +473,7 @@ Add this to the `write_files` section of `infra/cloud-init/cloud-config.template
 
 ## 10. Backup
 
-No application-level backup implementation is required. Restic backs up all of `/data/` daily. Store all persistent data under `/data/containers/<app-name>/` and it is covered.
+No application-level backup implementation is required. The planned backup design covers all of `/data/`; backup is not implemented and ADR-006 is undecided. Store all persistent data under `/data/containers/<app-name>/` and it is within the planned scope.
 
 Do not implement application-specific backup logic. Do not use external managed database services outside `/data/` unless an independent backup strategy is documented.
 
@@ -588,7 +592,7 @@ Applications register themselves by saving a deployment manifest to `/data/apps/
 └── another-app.sh
 ```
 
-`infra/host/deploy-service.sh` saves its own invocation as a manifest. The manifest records the application name, image, port, domain, volumes, environment, and admin flag. The cloud-init replay block is:
+`infra/host/deploy-service.sh` saves its own invocation as a manifest. The manifest records the application name, image, port, domain, volumes, non-secret environment, secret OCIDs, and admin flag. It is mode `0600` and must not contain secret values. The cloud-init replay block is:
 
 ```bash
 if [ -d /data/apps ] && ls /data/apps/*.sh 2>/dev/null | grep -q .; then
@@ -628,9 +632,9 @@ sudo systemctl daemon-reload
      /data/containers/<app-name>/data \
      /data/containers/<app-name>/logs \
      /data/containers/<app-name>/config
-   sudo touch /data/containers/<app-name>/env
-   sudo chmod 600 /data/containers/<app-name>/env
    ```
+
+   Do not create a persistent secret environment file. The deploy script creates `/run/apps/<app-name>/env` from `--secret-env` values.
 
 3. Deploy with the script:
 
@@ -639,7 +643,8 @@ sudo systemctl daemon-reload
      --name <app-name> \
      --image <image>:<tag> \
      --port <port> \
-     --domain <domain>
+     --domain <domain> \
+     --secret-env <KEY>=<secret-ocid>
    ```
 
 4. Confirm the wildcard DNS record covers `<domain>`. Add a specific DNS Only record only if it does not.
@@ -738,8 +743,8 @@ sudo systemctl daemon-reload
 - [ ] Traefik route config in `/etc/traefik/config/<app-name>.yaml`.
 - [ ] DNS record in Cloudflare, DNS Only.
 - [ ] Logrotate config created for file-based logging.
-- [ ] Environment file at `/data/containers/<app-name>/env`, mode `0600`.
-- [ ] Deployment manifest saved to `/data/apps/<app-name>.sh`.
+- [ ] Runtime environment file at `/run/apps/<app-name>/env`, mode `0600`, when secret values are used.
+- [ ] Deployment manifest saved to `/data/apps/<app-name>.sh`, mode `0600`.
 
 ### Runtime verification
 

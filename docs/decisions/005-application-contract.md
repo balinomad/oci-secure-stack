@@ -3,7 +3,7 @@ name: "ADR-005: Application Container Contract"
 description: |
   Decision to run application containers rootless under dedicated users, with restricted volumes, minimal capabilities, and non-world-readable secrets.
 status: draft
-version: 1.3
+version: 1.4
 updated: 2026-11-15
 ---
 
@@ -11,16 +11,16 @@ updated: 2026-11-15
 
 ## Context
 
-The current deployment path runs services as `opc`, writes environment values into world-readable manifests, and accepts unrestricted volume sources. Findings F11 and F13 record the manifest and volume defects.
+The deployment path previously ran services as `opc`, wrote environment values into world-readable manifests, and accepted unrestricted volume sources. Findings F11 and F13 record the manifest and volume defects. Secret handling is fixed statically; rootless execution and volume validation remain open.
 
 ## Affected paths
 
-- `infra/host/deploy-service.sh:19-20,108-123,125-130,187-206,232-239`
+- `infra/host/deploy-service.sh`
 - `docs/process/issue-log.md` F11, F13, F29
 
 ## Current text or behavior
 
-The deployment script runs services as `opc` or root. It writes `--env` values into `Environment=` in a Quadlet unit and into a world-readable manifest. It does not validate volume sources.
+The deployment script runs services as `opc` or root. It writes non-secret `--env` values into `Environment=` in a Quadlet unit. It resolves `--secret-env` OCIDs into a root-only `/run/apps/<name>/env` file and writes the manifest with mode `0600`. The manifest records secret OCIDs, not values. The script does not validate volume sources.
 
 ## Contradiction
 
@@ -61,6 +61,6 @@ Adopt option 2.
 
 ## References
 
-- `docs/guides/adding-apps.md:16-176`
-- `docs/architecture.md:95`
+- `docs/guides/adding-apps.md` sections 1 through 3.4
+- `docs/architecture.md` section "P3. Least privilege"
 - `docs/process/issue-log.md` F11, F13

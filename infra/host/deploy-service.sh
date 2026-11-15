@@ -15,7 +15,8 @@
 #   -i, --image    <image>    Container image (e.g. myapp:latest)
 #   -p, --port     <port>     Internal container port (e.g. 8080)
 #   -d, --domain   <domain>   Full hostname for this service (e.g. app.example.com)
-#   -e, --env      <KEY=VAL>  Environment variable (repeatable)
+#   -e, --env      <KEY=VAL>  Non-secret environment variable (repeatable)
+#       --secret-env <KEY=OCID>  OCI Vault secret environment variable (repeatable)
 #   -v, --volume   <src:dst>  Volume mount — src must be under /data/containers/
 #                             (repeatable; :Z SELinux label added automatically)
 #   --admin                   Restrict to VPN + Authelia (applies admin-chain middleware)
@@ -38,7 +39,12 @@
 #     --domain tool.example.com \
 #     --admin \
 #     --volume /data/containers/mytool:/app/data \
-#     --env DATABASE_URL=sqlite:///app/data/db.sqlite3
+#     --env DATABASE_URL=sqlite:///app/data/db.sqlite3 \
+#     --secret-env DATABASE_PASSWORD=ocid1.vaultsecret.example
+#
+# Use --env for non-secret values only. Use --secret-env for values held in
+# OCI Vault. The script writes secret values only to /run/apps/<name>/env and
+# records the secret OCID, not the value, in the deployment manifest.
 #
 # ==============================================================
 
@@ -54,11 +60,13 @@ DOMAIN=""
 ADMIN=false
 DRY_RUN=false
 ENV_VARS=()
+SECRET_ENV=()
 VOLUMES=()
 
 TRAEFIK_CONFIG_DIR="/etc/traefik/config"
 QUADLET_DIR="/etc/containers/systemd"
 DATA_DIR="/data/containers"
+RUNTIME_DIR="/run/apps"
 
 # --------------------------------------------------------------
 # Argument parsing
@@ -75,6 +83,7 @@ while [[ $# -gt 0 ]]; do
     -p|--port)    PORT="$2";   shift 2 ;;
     -d|--domain)  DOMAIN="$2"; shift 2 ;;
     -e|--env)     ENV_VARS+=("$2"); shift 2 ;;
+    --secret-env) SECRET_ENV+=("$2"); shift 2 ;;
     -v|--volume)  VOLUMES+=("$2");  shift 2 ;;
     --admin)      ADMIN=true;  shift ;;
     --dry-run)    DRY_RUN=true; shift ;;
@@ -102,6 +111,47 @@ if ! [[ "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
   exit 1
 fi
 
+for secret_env in "${SECRET_ENV[@]+"${SECRET_ENV[@]}"}"; do
+  if [[ "$secret_env" != *=* ]]; then
+    echo "Error: --secret-env must be KEY=OCID" >&2
+    exit 1
+  fi
+
+  secret_key="${secret_env%%=*}"
+  secret_ocid="${secret_env#*=}"
+
+  if [[ ! "$secret_key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    echo "Error: invalid secret environment variable name: ${secret_key}" >&2
+    exit 1
+  fi
+
+  if [[ "$secret_ocid" != ocid1.* ]]; then
+    echo "Error: --secret-env ${secret_key} must reference an OCI Vault secret OCID" >&2
+    exit 1
+  fi
+
+  for env_var in "${ENV_VARS[@]+"${ENV_VARS[@]}"}"; do
+    if [[ "${env_var%%=*}" == "$secret_key" ]]; then
+      echo "Error: ${secret_key} is set by both --env and --secret-env" >&2
+      exit 1
+    fi
+  done
+done
+
+fetch_secret() {
+  local secret_id="$1"
+
+  if ! command -v oci >/dev/null 2>&1; then
+    echo "Error: the OCI CLI is required to resolve --secret-env values" >&2
+    return 1
+  fi
+
+  oci secrets secret-bundle get \
+    --secret-id "${secret_id}" \
+    --query "data.secretBundleContent.content" \
+    --raw-output | base64 -d
+}
+
 # --------------------------------------------------------------
 # Build file contents
 # --------------------------------------------------------------
@@ -121,6 +171,11 @@ for env_var in "${ENV_VARS[@]+"${ENV_VARS[@]}"}"; do
   QUADLET_CONTENT+="Environment=${env_var}
 "
 done
+
+if [[ ${#SECRET_ENV[@]} -gt 0 ]]; then
+  QUADLET_CONTENT+="EnvironmentFile=${RUNTIME_DIR}/${NAME}/env
+"
+fi
 
 for vol in "${VOLUMES[@]+"${VOLUMES[@]}"}"; do
   # Append :Z for SELinux label if not already present
@@ -193,6 +248,45 @@ fi
 mkdir -p "$DATA_PATH"
 echo "Created data directory: ${DATA_PATH}"
 
+# Resolve OCI Vault secret values into an ephemeral environment file.
+# The file is on tmpfs, is readable only by root, and is not backed up.
+if [[ ${#SECRET_ENV[@]} -gt 0 ]]; then
+  RUNTIME_PATH="${RUNTIME_DIR}/${NAME}"
+  SECRET_FILE="${RUNTIME_PATH}/env"
+
+  install -d -m 0700 -o root -g root "$RUNTIME_PATH"
+  install -m 0600 -o root -g root /dev/null "$SECRET_FILE"
+
+  for secret_env in "${SECRET_ENV[@]}"; do
+    secret_key="${secret_env%%=*}"
+    secret_ocid="${secret_env#*=}"
+
+    if ! secret_value="$(fetch_secret "$secret_ocid")"; then
+      rm -f "$SECRET_FILE"
+      echo "Error: failed to fetch secret for ${secret_key}" >&2
+      exit 1
+    fi
+
+    if [[ -z "$secret_value" ]]; then
+      rm -f "$SECRET_FILE"
+      echo "Error: secret for ${secret_key} is empty" >&2
+      exit 1
+    fi
+
+    if [[ "$secret_value" == *$'\n'* ]]; then
+      rm -f "$SECRET_FILE"
+      echo "Error: secret for ${secret_key} contains a newline" >&2
+      exit 1
+    fi
+
+    printf '%s=%s\n' "$secret_key" "$secret_value" >> "$SECRET_FILE"
+  done
+
+  echo "Runtime secret environment file: ${SECRET_FILE} (0600)"
+else
+  rm -f "${RUNTIME_DIR}/${NAME}/env"
+fi
+
 # Write Quadlet unit
 echo "$QUADLET_CONTENT" > "$QUADLET_FILE"
 echo "Written: ${QUADLET_FILE}"
@@ -217,6 +311,8 @@ MANIFEST_FILE="${MANIFEST_DIR}/${NAME}.sh"
 
 mkdir -p "$MANIFEST_DIR"
 
+install -m 0600 -o root -g root /dev/null "$MANIFEST_FILE"
+
 {
   echo "#!/usr/bin/env bash"
   echo "# Auto-generated deployment manifest for ${NAME}"
@@ -233,8 +329,10 @@ mkdir -p "$MANIFEST_DIR"
   for env_var in "${ENV_VARS[@]+"${ENV_VARS[@]}"}"; do
     echo "  --env ${env_var} \\"
   done
+  for secret_env in "${SECRET_ENV[@]+"${SECRET_ENV[@]}"}"; do
+    echo "  --secret-env ${secret_env} \\"
+  done
   [[ "$ADMIN" == "true" ]] && echo "  --admin \\"
   echo '  "$@"'
-} > "$MANIFEST_FILE"
-chmod 755 "$MANIFEST_FILE"
+} >> "$MANIFEST_FILE"
 echo "Deployment manifest saved: ${MANIFEST_FILE}"

@@ -3,8 +3,8 @@ name: "Application Manifest Reference"
 description: |
   Exact format of the application manifest written by infra/host/deploy-service.sh.
 status: draft
-version: 1.1
-updated: 2026-11-14
+version: 1.2
+updated: 2026-11-15
 ---
 
 # Application Manifest Reference
@@ -26,10 +26,11 @@ This page defines the application manifest format used by the stack.
   --domain <domain> \
   --volume <volume> \
   --env <name=value> \
+  --secret-env <name=ocid> \
   --admin
 ```
 
-The cloud-init replay block executes each manifest after the block volume is mounted. Manifests must not contain secret values. Use Podman secrets or root-only environment files.
+The cloud-init replay block executes each manifest after the block volume is mounted. Manifests are mode `0600` and must not contain secret values. `--secret-env` records the OCI Vault secret OCID. The deploy script fetches the value into `/run/apps/<app-name>/env` with mode `0600`.
 
 ## Related documents
 

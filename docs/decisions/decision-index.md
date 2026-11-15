@@ -3,8 +3,8 @@ name: "Decision Records"
 description: |
   Index of architecture decision records for the OCI secure stack.
 status: active
-version: 1.3
-updated: 2026-11-14
+version: 1.5
+updated: 2026-11-15
 ---
 
 # Decision Records
@@ -24,8 +24,9 @@ Each record states the context, the affected paths, the current text or behavior
 | ADR-009 | Infrastructure container runtime     | Draft  | [009-infrastructure-container-runtime.md](009-infrastructure-container-runtime.md) |
 | ADR-010 | Local monitoring UI and history      | Draft  | [010-monitoring-presentation.md](010-monitoring-presentation.md)                   |
 | ADR-011 | Alert delivery                       | Draft  | [011-alert-delivery.md](011-alert-delivery.md)                                     |
+| ADR-012 | Runtime secret delivery              | Draft  | [012-runtime-secret-delivery.md](012-runtime-secret-delivery.md)                   |
 
-ADR-006 and ADR-007 are draft. ADR-009, ADR-010, and ADR-011 are decided in content and remain draft until committed and confirmed.
+All records remain draft. ADR-006 is unresolved. The other records contain decisions but are not confirmed.
 
 ## Open decision questions
 
