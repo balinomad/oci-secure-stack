@@ -3,8 +3,8 @@ name: "Traefik Reference"
 description: |
   Exact Traefik static and dynamic configuration, systemd unit, binary update, backup, logging, audit, and SELinux settings for the host.
 status: draft
-version: 1.5
-updated: 2026-11-14
+version: 1.6
+updated: 2026-11-15
 ---
 
 # Traefik Reference
@@ -299,7 +299,7 @@ The file must be owned by `traefik:traefik` and mode `0600`. The token must not 
 
 Existing Traefik configuration files under `/etc/traefik` are preserved. The script renders a missing file from `infra/configs/traefik/` and requires `DOMAIN` and `ACME_EMAIL` for that case.
 
-The manual binary update script in section 5 is superseded. It is retained as an example only.
+The manual binary update script in section 5 is an example only. Use `infra/host/03-traefik.sh` for deployment.
 
 ## 5. Traefik binary update script
 

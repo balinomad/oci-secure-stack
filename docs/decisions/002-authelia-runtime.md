@@ -3,7 +3,7 @@ name: "ADR-002: Authelia Runtime and File Ownership"
 description: |
   Decision to run Authelia as a rootless Podman container under a dedicated user with persistent state on the data volume.
 status: draft
-version: 1.3
+version: 1.4
 updated: 2026-11-15
 ---
 
@@ -15,12 +15,12 @@ Authelia holds session keys, TOTP secrets, and the user database. Running it as 
 
 ## Affected paths
 
-- `infra/cloud-init/cloud-config.template.yaml:426-485`
+- `infra/cloud-init/cloud-config.template.yaml` section `Authelia First-Run Bootstrap`
 - `docs/process/issue-log.md` F1, F10
 
 ## Current text or behavior
 
-The template starts Authelia as a plain unit and has a root-owned file ownership mismatch with the image user. The static conversion to a rootless Quadlet unit is applied but unproven.
+Authelia is configured as a rootless Quadlet unit under a dedicated user. Startup and file ownership are unproven.
 
 ## Contradiction
 
@@ -68,7 +68,7 @@ Adopt option 2.
 
 ## References
 
-- `docs/reference/authelia.md:45-64,84,95-96`
-- `docs/guides/adding-apps.md:337`
+- `docs/reference/authelia.md` sections 3 through 6
+- `docs/guides/adding-apps.md` section 6.3
 - `docs/process/issue-log.md` F1
 - `docs/decisions/009-infrastructure-container-runtime.md`

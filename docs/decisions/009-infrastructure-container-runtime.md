@@ -3,8 +3,8 @@ name: "ADR-009: Infrastructure Container Runtime"
 description: |
   Decision on whether infrastructure containers use Quadlet or plain systemd units.
 status: draft
-version: 1.3
-updated: 2026-11-14
+version: 1.4
+updated: 2026-11-15
 ---
 
 # ADR-009: Infrastructure Container Runtime
@@ -15,8 +15,8 @@ The template defined Authelia and wg-easy as plain systemd units with `podman ru
 
 ## Affected paths
 
-- `infra/cloud-init/cloud-config.template.yaml:426-485`
-- `infra/host/verify-stack.sh:155-177`
+- `infra/cloud-init/cloud-config.template.yaml` section `Quadlet Units`
+- `infra/host/verify-stack.sh` section `4. Service Health`
 - `docs/process/issue-log.md` F10, F12, F25
 
 ## Current text or behavior

@@ -3,7 +3,7 @@ name: "ADR-001: Management Plane Exposure Model"
 description: |
   Decision to keep the Traefik dashboard, metrics endpoints, Grafana, and Valkey on loopback, and to require Authelia plus PAM for Cockpit.
 status: draft
-version: 1.5
+version: 1.6
 updated: 2026-11-15
 ---
 
@@ -68,6 +68,6 @@ Adopt option 2.
 
 ## References
 
-- `docs/architecture.md:158-185`
-- `docs/reference/traefik.md:211`
+- `docs/architecture.md` sections "System architecture" and "Component roles"
+- `docs/reference/traefik.md` section 2
 - `docs/process/issue-log.md` F6, F8, F9

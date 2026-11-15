@@ -26,7 +26,7 @@ Thank you for considering a contribution to this project.
 
 - **Scripts:** Validate changes to `infra/cloud-init/cloud-config.template.yaml`, `infra/host/deploy-service.sh`, and `infra/host/verify-stack.sh` locally. Then run the incremental test procedure in [docs/guides/operations.md](docs/guides/operations.md).
 - **Documentation:** Follow [docs/process/document-conventions.md](docs/process/document-conventions.md). Use the document frontmatter. Do not add horizontal rules between sections. Do not use bold text as a header substitute.
-- **Documentation checks:** Run `tools/audit-docs.sh` before opening a pull request. The script checks front matter, links, and document reachability.
+- **Documentation checks:** Run `tools/audit-docs.sh` before opening a pull request. The script checks front matter, links, sections, YAML keys, and shell functions.
 - **Software versions:** Pin infrastructure components (Traefik, Authelia, wg-easy) to specific versions. Update the version pin and its evidence together.
 - **Secrets:** Never commit real values. Template files use `${VARIABLE}` placeholders processed by `envsubst`. Do not commit `.env` or a rendered `cloud-config.yaml`.
 - **Evidence:** Do not claim a deployment behaviour without an execution log, a test result, or a direct artifact. Record findings in [docs/process/issue-log.md](docs/process/issue-log.md).

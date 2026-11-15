@@ -3,8 +3,8 @@ name: "Document Conventions"
 description: |
   Working conventions for project documents, including status, version numbering, commit behavior, placement, and per-document independence.
 status: active
-version: 1.1
-updated: 2026-11-13
+version: 1.2
+updated: 2026-11-15
 ---
 
 # Document Conventions
@@ -52,7 +52,6 @@ Every document declares one status in its frontmatter.
 | ------------ | ------------------------------------------------- |
 | `draft`      | Not confirmed, incomplete, or placeholder         |
 | `active`     | Current working record or authoritative reference |
-| `legacy`     | Retained for reference, partly superseded         |
 | `final`      | Confirmed and verified for the current release    |
 | `superseded` | Replaced and no longer authoritative              |
 
@@ -120,10 +119,6 @@ Stable procedures belong in `docs/guides/`. A checklist that tracks a one-time d
 Architecture decision records belong in `docs/decisions/`.
 
 An unassigned decision question may be listed in the open decision questions table in `docs/decisions/decision-index.md`. When a draft decision file is created, move the question into that file and remove the table row. Do not keep the question in both places.
-
-### Legacy documents
-
-Legacy source documents are migrated into the project or process layers and then deleted. Do not retain a parallel legacy tree. Record historical provenance in the decision record or issue log that uses it, not in a temporary file.
 
 ## Frontmatter
 

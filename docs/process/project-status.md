@@ -3,7 +3,7 @@ name: "Project Status Report"
 description: |
   Static assessment of repository state, documentation state, implementation status, risks, and explicit non-claims.
 status: active
-version: 1.9
+version: 1.10
 updated: 2026-11-15
 ---
 
@@ -16,13 +16,12 @@ Method: static analysis of repository files. No OCI deployment has been executed
 
 The documentation tree is consolidated. The implementation is still unproven.
 
-- The design record, guides, reference, and decision records now have one entry point each.
+- The design record, guides, reference, and decision records have one entry point each.
 - The implementation is a cloud-init template, a configuration source tree, and a set of deployment and verification scripts. None has deployment evidence.
 - Several strategic decisions still contradict the implementation.
-- The goals are now stated in the architecture record but are not formally confirmed.
-- The legacy documentation tree is migrated in draft form and retained until the migration is verified.
+- The goals are stated in the architecture record but are not formally confirmed.
 
-The cloud-init template and the configuration source tree define the base host deployment. Until they are tested, they are also the only source of ground truth about base host behaviour, which is the opposite of the intended governance model.
+The cloud-init template and the configuration source tree define the base host deployment. They are the only source of ground truth until deployment evidence exists.
 
 ## Report scope
 
@@ -45,20 +44,18 @@ This report covers the project defined in `docs/architecture.md`. It records rep
 ## Git state
 
 - Branch `master` tracks `origin/master`, remote `github.com/balinomad/oci-secure-stack`.
-- Last commit before the documentation consolidation: `2c1ae2c`, 2026-11-12.
-- The consolidation is uncommitted until the next commit.
 
 ## Documentation state
 
-| Document                        | Role                                                         | Status                              |
-| ------------------------------- | ------------------------------------------------------------ | ----------------------------------- |
-| `README.md`                     | Front door and documentation map                             | Current, design unverified          |
-| `docs/architecture.md`          | Sole design record                                           | Draft, needs confirmation           |
-| `docs/decisions/`               | Decision records                                             | Draft                               |
-| `docs/guides/`                  | Deploy, operate, extend                                      | Draft, derived from legacy          |
-| `docs/reference/`               | Exact configuration facts                                    | Draft, derived from legacy          |
-| `docs/process/`                 | Living status, issue log, delivery plan, acceptance criteria | Active                              |
-| `docs/process/delivery-plan.md` | Current implementation plan                                  | Active, supersedes legacy work plan |
+| Document                        | Role                                                         | Status                     |
+| ------------------------------- | ------------------------------------------------------------ | -------------------------- |
+| `README.md`                     | Front door and documentation map                             | Current, design unverified |
+| `docs/architecture.md`          | Sole design record                                           | Draft, needs confirmation  |
+| `docs/decisions/`               | Decision records                                             | Draft                      |
+| `docs/guides/`                  | Deploy, operate, extend                                      | Draft                      |
+| `docs/reference/`               | Exact configuration facts                                    | Draft                      |
+| `docs/process/`                 | Living status, issue log, delivery plan, acceptance criteria | Active                     |
+| `docs/process/delivery-plan.md` | Current implementation plan                                  | Active                     |
 
 The documentation has no empty placeholders. The guides describe the intended design; they do not prove deployment behaviour.
 
@@ -85,7 +82,7 @@ Not implemented:
 - Terraform or any IaC for VCN, subnet, instance, block volume, Vault, IAM, DNS
 - Restic backup, timer, and backup secret
 - Health checks beyond the configured service checks and certificate expiry timer
-- CI, linting, schema validation, or tests
+- CI, linting, and test suites. Manifest schema validation exists as a local script but is not wired into CI.
 - Changelog, releases, version-pin verification
 - Any deployment evidence
 

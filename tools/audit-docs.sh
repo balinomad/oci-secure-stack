@@ -445,6 +445,221 @@ check_line_references() {
   done
 }
 
+check_markdown_section_number() {
+  local source="$1"
+  local line="$2"
+  local target="$3"
+  local resolved="$4"
+  local number="$5"
+  local escaped="${number//./\\.}"
+
+  if ! grep -Eq "^#{1,6}[[:space:]]+${escaped}([.[:space:]]|$)" "${resolved}"; then
+    add_error "${source}" "${line}" "section not found: ${number} in ${target}"
+  fi
+}
+
+check_markdown_section_name() {
+  local source="$1"
+  local line="$2"
+  local target="$3"
+  local resolved="$4"
+  local name="$5"
+
+  if ! awk -v name="${name}" '
+    /^#{1,6}[[:space:]]+/ {
+      heading = $0
+      sub(/^#{1,6}[[:space:]]+/, "", heading)
+      if (heading == name) {
+        found = 1
+      }
+    }
+    END { exit(found ? 0 : 1) }
+  ' "${resolved}"; then
+    add_error "${source}" "${line}" "section not found: \"${name}\" in ${target}"
+  fi
+}
+
+check_code_section_name() {
+  local source="$1"
+  local line="$2"
+  local target="$3"
+  local resolved="$4"
+  local name="$5"
+
+  local first="${name%% *}"
+  first="${first,,}"
+
+  if ! grep -Fq "# ${name}" "${resolved}" \
+    && ! grep -Fq "header \"${name}\"" "${resolved}" \
+    && ! grep -Eq "^[[:space:]]*${first}:" "${resolved}"; then
+    add_error "${source}" "${line}" "section not found: ${name} in ${target}"
+  fi
+}
+
+check_yaml_key() {
+  local source="$1"
+  local line="$2"
+  local target="$3"
+  local resolved="$4"
+  local key="$5"
+  local part
+  local -a parts=()
+
+  IFS='.' read -ra parts <<< "${key}"
+  for part in "${parts[@]}"; do
+    if [[ -z "${part}" ]] || ! grep -Eq "^[[:space:]]*${part}:" "${resolved}"; then
+      add_error "${source}" "${line}" "key not found: ${key} in ${target}"
+      return
+    fi
+  done
+}
+
+check_function_name() {
+  local source="$1"
+  local line="$2"
+  local target="$3"
+  local resolved="$4"
+  local name="$5"
+
+  if ! grep -Eq "^[[:space:]]*(function[[:space:]]+)?${name}[[:space:]]*\(\)" "${resolved}"; then
+    add_error "${source}" "${line}" "function not found: ${name} in ${target}"
+  fi
+}
+
+check_anchor_references() {
+  local source="$1"
+  local start="$2"
+  local root="$3"
+  local -a lines=()
+  local i
+  local line
+  local fence_char=""
+  local fence_length=0
+  local fence_re='^(`{3,}|~{3,})'
+  # shellcheck disable=SC2016  # regex literals; no shell expansion intended
+  local path_span_re='`((docs|infra|tools)/[^` :<>*?${}]+|\.env[^` :<>*?${}]*|README\.md|CONTRIBUTING\.md|SECURITY\.md|CHANGELOG\.md)`'
+  # shellcheck disable=SC2016  # regex literal; no shell expansion intended
+  local inline_re='`[^`]+`'
+  local list_re='^[[:space:]]*[0-9]+(\.[0-9]+)?(([[:space:]]*(,|and|through|to)[[:space:]]*[0-9]+(\.[0-9]+)?)*)'
+  local match
+  local target
+  local rest
+  local next_match
+  local anchor_text
+  local keyword
+  local list
+  local resolved
+  local item
+
+  mapfile -t lines < "${source}"
+
+  for ((i = start; i < ${#lines[@]}; i++)); do
+    line="${lines[i]}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+
+    if [[ -z "${fence_char}" ]]; then
+      if [[ "${line}" =~ ${fence_re} ]]; then
+        fence_char="${BASH_REMATCH[1]:0:1}"
+        fence_length=${#BASH_REMATCH[1]}
+        continue
+      fi
+    else
+      if [[ "${line}" =~ ${fence_re} ]]; then
+        match="${BASH_REMATCH[1]}"
+        if [[ "${match:0:1}" == "${fence_char}" ]] \
+          && (( ${#match} >= fence_length )); then
+          fence_char=""
+          fence_length=0
+        fi
+      fi
+      continue
+    fi
+
+    while [[ "${line}" =~ ${path_span_re} ]]; do
+      match="${BASH_REMATCH[0]}"
+      target="${BASH_REMATCH[1]}"
+      rest="${line#*"${match}"}"
+
+      if [[ "${rest}" =~ ${path_span_re} ]]; then
+        next_match="${BASH_REMATCH[0]}"
+        anchor_text="${rest%%"${next_match}"*}"
+      else
+        anchor_text="${rest}"
+      fi
+
+      anchor_text="${anchor_text#"${anchor_text%%[![:space:]]*}"}"
+      while [[ "${anchor_text}" == ";"* || "${anchor_text}" == ","* ]]; do
+        anchor_text="${anchor_text:1}"
+        anchor_text="${anchor_text#"${anchor_text%%[![:space:]]*}"}"
+      done
+      if [[ ! "${anchor_text}" =~ ^[[:space:]]*(section|sections|key|keys|component|components|function|functions)([[:space:]]|$) ]]; then
+        line="${rest}"
+        continue
+      fi
+      keyword="${BASH_REMATCH[1]}"
+      list="${anchor_text#*"${keyword}"}"
+
+      resolved=""
+      if [[ -e "${root}/${target}" ]]; then
+        resolved="${root}/${target}"
+      elif [[ -e "$(dirname -- "${source}")/${target}" ]]; then
+        resolved="$(dirname -- "${source}")/${target}"
+      else
+        add_error "${source}" "$((i + 1))" "anchored path not found: ${target}"
+        line="${rest}"
+        continue
+      fi
+
+      case "${keyword}" in
+        section|sections)
+          if [[ "${list}" == *'`'* ]]; then
+            while [[ "${list}" =~ ${inline_re} ]]; do
+              item="${BASH_REMATCH[0]}"
+              item="${item:1:${#item}-2}"
+              check_code_section_name "${source}" "$((i + 1))" "${target}" "${resolved}" "${item}"
+              list="${list#*"${BASH_REMATCH[0]}"}"
+            done
+          elif [[ "${list}" == *'"'* ]]; then
+            while [[ "${list}" =~ \"([^\"]+)\" ]]; do
+              item="${BASH_REMATCH[1]}"
+              check_markdown_section_name "${source}" "$((i + 1))" "${target}" "${resolved}" "${item}"
+              list="${list#*"${BASH_REMATCH[0]}"}"
+            done
+          else
+            if [[ "${list}" =~ ${list_re} ]]; then
+              list="${BASH_REMATCH[0]}"
+            fi
+            while [[ "${list}" =~ ([0-9]+(\.[0-9]+)?) ]]; do
+              item="${BASH_REMATCH[1]}"
+              check_markdown_section_number "${source}" "$((i + 1))" "${target}" "${resolved}" "${item}"
+              list="${list#*"${BASH_REMATCH[0]}"}"
+            done
+          fi
+          ;;
+        key|keys|component|components)
+          while [[ "${list}" =~ ${inline_re} ]]; do
+            item="${BASH_REMATCH[0]}"
+            item="${item:1:${#item}-2}"
+            check_yaml_key "${source}" "$((i + 1))" "${target}" "${resolved}" "${item}"
+            list="${list#*"${BASH_REMATCH[0]}"}"
+          done
+          ;;
+        function|functions)
+          while [[ "${list}" =~ ${inline_re} ]]; do
+            item="${BASH_REMATCH[0]}"
+            item="${item:1:${#item}-2}"
+            check_function_name "${source}" "$((i + 1))" "${target}" "${resolved}" "${item}"
+            list="${list#*"${BASH_REMATCH[0]}"}"
+          done
+          ;;
+      esac
+
+      line="${rest}"
+    done
+  done
+}
+
 audit_file() {
   local path="$1"
   local root="$2"
@@ -458,6 +673,7 @@ audit_file() {
   if (( BODY_START >= 0 )); then
     check_body "${path}" "${BODY_START}" "${root}"
     check_line_references "${path}" "${BODY_START}" "${root}"
+    check_anchor_references "${path}" "${BODY_START}" "${root}"
   fi
 }
 

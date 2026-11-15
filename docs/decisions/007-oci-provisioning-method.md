@@ -3,8 +3,8 @@ name: "ADR-007: OCI Provisioning Method"
 description: |
   Decision on whether OCI prerequisites are manual or Terraform-managed.
 status: draft
-version: 1.2
-updated: 2026-11-14
+version: 1.3
+updated: 2026-11-15
 ---
 
 # ADR-007: OCI Provisioning Method
@@ -51,7 +51,7 @@ Adopt option 2.
 
 ## Consequences
 
-- OCI prerequisites are managed as code.
+- OCI prerequisites will be managed as code.
 - This repository remains infrastructure-only.
 - F21 remains open until the Terraform coverage is verified.
 - The Terraform state and provider versions require governance.

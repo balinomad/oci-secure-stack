@@ -3,7 +3,7 @@ name: "ADR-003: Metrics Architecture"
 description: |
   Decision to use PCP-native metrics export instead of a full Prometheus server, with all endpoints bound to loopback.
 status: draft
-version: 1.6
+version: 1.7
 updated: 2026-11-15
 ---
 
@@ -61,12 +61,12 @@ Adopt option 2.
 - Operators use PCP tooling, Grafana through an SSH tunnel, or a future external Prometheus server.
 - The static configuration has no metrics route.
 - The local Grafana presentation and optional Valkey retention are defined in ADR-010.
-- This decision supersedes the earlier metrics routing proposal. The current metrics configuration is in `docs/reference/infrastructure.md:212-221`.
+- The current metrics configuration is in `docs/reference/infrastructure.md` section 8.3.
 
 ## References
 
-- `docs/reference/infrastructure.md:212-221`
-- `docs/architecture.md:179`
+- `docs/reference/infrastructure.md` section 8.3
+- `docs/architecture.md` section "Component roles"
 - `docs/decisions/010-monitoring-presentation.md`
 - `docs/decisions/011-alert-delivery.md`
 - `docs/process/issue-log.md` F8

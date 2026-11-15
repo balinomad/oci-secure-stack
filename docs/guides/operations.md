@@ -3,8 +3,8 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.8
-updated: 2026-11-14
+version: 1.9
+updated: 2026-11-15
 ---
 
 # Operations
@@ -830,6 +830,8 @@ Total downtime is the interval between old instance termination and the new inst
 
 The block volume holds all persistent state. If it is lost or corrupted, WireGuard keys, TLS certificates, the Authelia database, container data, Grafana state, optional Valkey history, and logs are lost. VM replacement does not protect against this.
 
+Backup is not implemented. ADR-006 remains undecided. The procedure below is the intended design.
+
 Restic is the recommended tool. It is a single static binary, deduplicating, encrypted at rest, and compatible with OCI Object Storage through its S3-compatible API.
 
 ### 11.1 Setup
@@ -912,9 +914,9 @@ sudo tail -f /data/logs/traefik/access.log
 
 ## 13. Traefik configuration and ACME backup
 
-Restic is the primary backup. A local secondary backup for root-filesystem Traefik configuration and ACME state can be created with `/usr/local/sbin/traefik-backup` and a daily timer. The script and unit are in `docs/reference/traefik.md`.
+The backup design uses Restic as the primary backup. A local secondary backup for root-filesystem Traefik configuration and ACME state can be created with `/usr/local/sbin/traefik-backup` and a daily timer. The script and unit are in `docs/reference/traefik.md`.
 
-The local backup excludes `/etc/traefik/env`. Restore the Cloudflare token from OCI Vault. Restic covers `/data/`; it does not include `/etc/traefik/env`. Protect the Restic repository.
+The local backup excludes `/etc/traefik/env`. Restore the Cloudflare token from OCI Vault. The backup design covers `/data/`; it does not include `/etc/traefik/env`. Protect the Restic repository.
 
 ## 14. Audit and security checks
 
@@ -984,7 +986,7 @@ terraform/
 └── variables.tf  # Domain, region, compartment OCID
 ```
 
-Terraform state should use OCI Object Storage as a remote backend. This is not part of v1.0 until ADR-007 is decided.
+Terraform state should use OCI Object Storage as a remote backend. Terraform is part of v1.0 per ADR-007. This repository contains no Terraform yet.
 
 ## Related documents
 

@@ -3,8 +3,8 @@ name: "ADR-011: Alert Delivery"
 description: |
   Decision to deliver local alerts through PCP pmie, systemd failure hooks, an HTTPS webhook, and an external heartbeat.
 status: draft
-version: 1.2
-updated: 2026-11-14
+version: 1.3
+updated: 2026-11-15
 ---
 
 # ADR-011: Alert Delivery
@@ -61,8 +61,6 @@ PCP is already installed and provides `pmie` for local threshold evaluation. sys
 - `docs/process/process-index.md`
 
 ## Current text or behavior
-
-The PCP data plane runs `pmcd`, `pmlogger`, `pmproxy`, and `pmie`. No `pmie` rules invoke an external notifier. No systemd `OnFailure=` hook exists. No certificate expiry check exists. No external heartbeat exists. Before this decision, `docs/guides/operations.md` section 4.7.1 stated that automated alert delivery was not configured.
 
 The implementation adds a dedicated `alerting` system user, a notifier, a dedicated `pmie` instance, service and certificate timers, an external heartbeat timer, and failure hooks for the core system units. The runtime webhook and heartbeat URLs come from OCI Vault and are stored in `/data/monitoring/alerting/env`.
 
