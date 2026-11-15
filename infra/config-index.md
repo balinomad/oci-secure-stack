@@ -104,15 +104,15 @@ A `secrets` entry with a `reference` field names the file that contains OCI Vaul
 
 Do not store secret values, secret OCIDs, private keys, tokens, password hashes, or certificate private keys in `infra/configs/` or `infra/runtime/`. Secret-bearing templates remain outside the `files` list. The manifest declares each runtime secret target and its required key names under `components.<name>.secrets`. The OCID-only reference file is declared by the optional `reference` field of a `components.<name>.secrets` entry. Runtime secrets come from OCI Vault. The deployment generates these files:
 
-| Reference file                               | Runtime file                                | Source of secret                           |
-| -------------------------------------------- | ------------------------------------------- | ------------------------------------------ |
-| `/etc/secure-stack/secret-refs/traefik.env`  | `/run/traefik/env`                          | `traefik-cloudflare-token`                 |
-| `/etc/secure-stack/secret-refs/grafana.env`  | `/run/monitoring/grafana/env`               | `grafana-admin-password`                   |
-| `/etc/secure-stack/secret-refs/alerting.env` | `/run/monitoring/alerting/env`              | `alert-webhook-url`, `alert-heartbeat-url` |
-| none                                         | `/data/authelia/env`                        | `authelia-admin-password`                  |
-| none                                         | `/data/containers/wg-easy/env`              | `wg-easy-admin-password`                   |
-| none                                         | `/etc/traefik/letsencrypt/acme.json`        | ACME certificate state                     |
-| none                                         | `/data/authelia/config/users_database.yaml` | Bootstrap password hash                    |
+| Reference file                               | Runtime file                                | Source of secret                                                                    |
+| -------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `/etc/secure-stack/secret-refs/traefik.env`  | `/run/traefik/env`                          | `traefik-cloudflare-token`                                                          |
+| `/etc/secure-stack/secret-refs/grafana.env`  | `/run/monitoring/grafana/env`               | `grafana-admin-password`                                                            |
+| `/etc/secure-stack/secret-refs/alerting.env` | `/run/monitoring/alerting/env`              | `alert-webhook-url`, `alert-heartbeat-url`                                          |
+| `/etc/secure-stack/secret-refs/authelia.env` | `/run/authelia/env`                         | `authelia-jwt-secret`, `authelia-session-secret`, `authelia-storage-encryption-key` |
+| none                                         | `/data/containers/wg-easy/env`              | `wg-easy-admin-password`                                                            |
+| none                                         | `/etc/traefik/letsencrypt/acme.json`        | ACME certificate state                                                              |
+| none                                         | `/data/authelia/config/users_database.yaml` | Bootstrap password hash                                                             |
 
 The placeholders are `<<INJECT_AT_DEPLOYMENT>>` and `<<INSTANCE_PUBLIC_IP>>`.
 

@@ -3,7 +3,7 @@ name: "Project Status Report"
 description: |
   Static assessment of repository state, documentation state, implementation status, risks, and explicit non-claims.
 status: active
-version: 1.11
+version: 1.12
 updated: 2026-11-15
 ---
 
@@ -76,7 +76,7 @@ Implemented in the monolith:
 - PCP export through `pmproxy`, the Podman PMDA, and the OpenMetrics PMDA
 - Optional Grafana and Valkey monitoring profiles, statically configured
 - Alert delivery through PCP `pmie`, systemd failure hooks, an HTTPS webhook, and an external heartbeat, statically configured
-- Runtime secret delivery for Traefik, Grafana, and Alerting through `/etc/secure-stack/secret-refs` and per-service `/run` oneshot units, statically configured
+- Runtime secret delivery for Traefik, Authelia, Grafana, and Alerting through `/etc/secure-stack/secret-refs` and per-service `/run` oneshot units, statically configured
 
 Not implemented:
 

@@ -3,7 +3,7 @@ name: "Getting Started"
 description: |
   End-to-end tutorial for provisioning the OCI secure stack from a clean Oracle Cloud Infrastructure environment.
 status: draft
-version: 1.7
+version: 1.8
 updated: 2026-11-15
 ---
 
@@ -21,7 +21,7 @@ All of the following must exist before the instance is launched. Cloud-init cann
 - An OCI compute instance with Oracle Linux 9. AMD and ARM shapes are supported.
 - A block volume attached as paravirtualized, 50 GB minimum.
 - An instance dynamic group and IAM policy that allow `read secret-family` in the Vault compartment.
-- An OCI Vault with five mandatory secrets and one optional Grafana secret for the `live` or `history` profile.
+- An OCI Vault with eight mandatory secrets and one optional Grafana secret for the `live` or `history` profile.
 - A Cloudflare zone and an API token with `Zone → DNS → Edit` permission on that zone.
 - DNS records for every hostname in section 5.
 - A workstation with `yq` v4 and `envsubst` for rendering the deployment file.
@@ -56,18 +56,21 @@ Do not expose the Traefik dashboard, raw metrics, `pmproxy`, Grafana, Valkey, Co
 
 The template uses `${VARIABLE}` syntax for site-specific values. All other `${...}` references inside `runcmd` blocks are shell variables and must remain unsubstituted.
 
-| Variable                         | Description                                             | Example                       |
-| -------------------------------- | ------------------------------------------------------- | ----------------------------- |
-| `${DOMAIN}`                      | Base domain for all subdomains                          | `example.com`                 |
-| `${ACME_EMAIL}`                  | Email for Let's Encrypt expiry notices                  | `ops@example.com`             |
-| `${ADMIN_EMAIL}`                 | Authelia admin user email                               | `admin@example.com`           |
-| `${CF_SECRET_OCID}`              | OCID of the Cloudflare token secret in OCI Vault        | `ocid1.vaultsecret.oc1..xxxx` |
-| `${AUTH_SECRET_OCID}`            | OCID of the Authelia admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..yyyy` |
-| `${WG_SECRET_OCID}`              | OCID of the wg-easy admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..zzzz` |
-| `${GRAFANA_SECRET_OCID}`         | OCID of the Grafana admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..gggg` |
-| `${ALERT_WEBHOOK_SECRET_OCID}`   | OCID of the alert webhook secret in OCI Vault           | `ocid1.vaultsecret.oc1..aaaa` |
-| `${ALERT_HEARTBEAT_SECRET_OCID}` | OCID of the alert heartbeat secret in OCI Vault         | `ocid1.vaultsecret.oc1..bbbb` |
-| `${MONITORING_PROFILE}`          | Monitoring profile: `live`, `history`, or `none`        | `live`                        |
+| Variable                                  | Description                                              | Example                       |
+| ----------------------------------------- | -------------------------------------------------------- | ----------------------------- |
+| `${DOMAIN}`                               | Base domain for all subdomains                           | `example.com`                 |
+| `${ACME_EMAIL}`                           | Email for Let's Encrypt expiry notices                   | `ops@example.com`             |
+| `${ADMIN_EMAIL}`                          | Authelia admin user email                                | `admin@example.com`           |
+| `${CF_SECRET_OCID}`                       | OCID of the Cloudflare token secret in OCI Vault         | `ocid1.vaultsecret.oc1..xxxx` |
+| `${AUTH_SECRET_OCID}`                     | OCID of the Authelia admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..yyyy` |
+| `${AUTHELIA_JWT_SECRET_OCID}`             | OCID of the Authelia JWT secret in OCI Vault             | `ocid1.vaultsecret.oc1..jjjj` |
+| `${AUTHELIA_SESSION_SECRET_OCID}`         | OCID of the Authelia session secret in OCI Vault         | `ocid1.vaultsecret.oc1..ssss` |
+| `${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID}` | OCID of the Authelia storage encryption key in OCI Vault | `ocid1.vaultsecret.oc1..kkkk` |
+| `${WG_SECRET_OCID}`                       | OCID of the wg-easy admin password secret in OCI Vault   | `ocid1.vaultsecret.oc1..zzzz` |
+| `${GRAFANA_SECRET_OCID}`                  | OCID of the Grafana admin password secret in OCI Vault   | `ocid1.vaultsecret.oc1..gggg` |
+| `${ALERT_WEBHOOK_SECRET_OCID}`            | OCID of the alert webhook secret in OCI Vault            | `ocid1.vaultsecret.oc1..aaaa` |
+| `${ALERT_HEARTBEAT_SECRET_OCID}`          | OCID of the alert heartbeat secret in OCI Vault          | `ocid1.vaultsecret.oc1..bbbb` |
+| `${MONITORING_PROFILE}`                   | Monitoring profile: `live`, `history`, or `none`         | `live`                        |
 
 `${GRAFANA_SECRET_OCID}` is required when `${MONITORING_PROFILE}` is `live` or `history`. The alert secret OCIDs are required in every profile.
 
@@ -87,6 +90,9 @@ ACME_EMAIL=ops@example.com
 ADMIN_EMAIL=admin@example.com
 CF_SECRET_OCID=ocid1.vaultsecret.oc1..xxxx
 AUTH_SECRET_OCID=ocid1.vaultsecret.oc1..yyyy
+AUTHELIA_JWT_SECRET_OCID=ocid1.vaultsecret.oc1..jjjj
+AUTHELIA_SESSION_SECRET_OCID=ocid1.vaultsecret.oc1..ssss
+AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID=ocid1.vaultsecret.oc1..kkkk
 WG_SECRET_OCID=ocid1.vaultsecret.oc1..zzzz
 GRAFANA_SECRET_OCID=ocid1.vaultsecret.oc1..gggg
 ALERT_WEBHOOK_SECRET_OCID=ocid1.vaultsecret.oc1..aaaa
@@ -96,7 +102,7 @@ MONITORING_PROFILE=live
 
 ## 4. Create OCI Vault secrets
 
-The cloud-init script fetches five mandatory secrets and the Grafana secret at first boot with Instance Principal authentication. No credentials are embedded in the template.
+The cloud-init script fetches eight mandatory secrets and the Grafana secret at first boot with Instance Principal authentication. No credentials are embedded in the template.
 
 ### 4.1 IAM policy
 
@@ -136,6 +142,22 @@ This is the initial Authelia admin password. Authelia hashes it and stores it in
 3. Copy the secret OCID. This is `${AUTH_SECRET_OCID}`.
 
 The Authelia admin user is independent of the OS `opc` user and of Cockpit PAM authentication.
+
+#### Authelia runtime secrets
+
+Authelia also needs three runtime secrets. OCI Vault stores these secrets. A root oneshot fetches them after every boot and writes `/run/authelia/env`.
+
+For a new deployment, generate each value with `openssl rand -hex 32`. For an existing deployment, copy the current values from `/data/authelia/env` before you create the Vault secrets. The storage encryption key must match the current database. A different key makes the database unreadable.
+
+Create three Vault secrets:
+
+| Secret name                       | Value                  | Variable                                  |
+| --------------------------------- | ---------------------- | ----------------------------------------- |
+| `authelia-jwt-secret`             | JWT signing secret     | `${AUTHELIA_JWT_SECRET_OCID}`             |
+| `authelia-session-secret`         | Session signing secret | `${AUTHELIA_SESSION_SECRET_OCID}`         |
+| `authelia-storage-encryption-key` | SQLite encryption key  | `${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID}` |
+
+Cloud-init writes the three OCIDs to `/etc/secure-stack/secret-refs/authelia.env` with mode `0600` and owner `root:root`. `stack-secrets-authelia.service` fetches the values and writes `/run/authelia/env` with mode `0600` and owner `authelia:authelia`. The deployment compares the Vault storage encryption key with `/data/authelia/env` before Authelia starts. A mismatch stops the boot. The legacy file `/data/authelia/env` is not modified and remains the rollback source until the first successful boot.
 
 ### 4.4 wg-easy admin password
 
@@ -194,6 +216,18 @@ oci secrets secret-bundle get \
 
 The command should print the Cloudflare token.
 
+### 4.9 Verify Authelia runtime secrets after boot
+
+Run this check after boot:
+
+```bash
+sudo systemctl status stack-secrets-authelia.service
+sudo stat -c '%U:%G %a' /run/authelia/env
+sudo grep -c '=ocid1\.' /run/authelia/env || true
+```
+
+The service must be active. The runtime file must be owned by `authelia:authelia` with mode `600`. The last command must print `0`.
+
 ## 5. Create DNS records
 
 All records must exist in Cloudflare before cloud-init runs. Traefik starts ACME challenges immediately on first start.
@@ -212,14 +246,14 @@ A wildcard record means new application services resolve without adding individu
 
 ## 6. Render the deployment file
 
-Create `.env` as described in section 3. Set `architecture` in `infra/manifest.yaml` to `amd64` or `arm64` to match the instance shape. If the architecture changes, run `tools/update-lock.sh` before rendering. The first cloud-init command checks the instance architecture and stops before host changes when it does not match. Render the component configuration into the cloud-config template, then substitute only the ten template variables. The validator and renderer require `yq` v4. Pass only the ten variables to `envsubst` so shell variables inside `runcmd` remain intact.
+Create `.env` as described in section 3. Set `architecture` in `infra/manifest.yaml` to `amd64` or `arm64` to match the instance shape. If the architecture changes, run `tools/update-lock.sh` before rendering. The first cloud-init command checks the instance architecture and stops before host changes when it does not match. Render the component configuration into the cloud-config template, then substitute only the thirteen template variables. The validator and renderer require `yq` v4. Pass only the thirteen variables to `envsubst` so shell variables inside `runcmd` remain intact.
 
 ```bash
 export $(cat .env | xargs)
 
 tools/validate-manifest.sh
 tools/render-config.sh \
-  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
+  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${AUTHELIA_JWT_SECRET_OCID} ${AUTHELIA_SESSION_SECRET_OCID} ${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
   > cloud-config.yaml
 ```
 

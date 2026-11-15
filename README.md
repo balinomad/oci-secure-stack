@@ -44,7 +44,7 @@ All state, including certificates, user accounts, WireGuard keys, and container 
    export $(cat .env | xargs)
    tools/validate-manifest.sh
    tools/render-config.sh \
-     | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
+     | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${AUTHELIA_JWT_SECRET_OCID} ${AUTHELIA_SESSION_SECRET_OCID} ${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
      > cloud-config.yaml
    ```
 

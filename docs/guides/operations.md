@@ -3,7 +3,7 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.10
+version: 1.11
 updated: 2026-11-15
 ---
 
@@ -37,7 +37,7 @@ tools/validate-manifest.sh
 ```bash
 export $(cat .env | xargs)
 tools/render-config.sh \
-  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
+  | envsubst '${DOMAIN} ${ACME_EMAIL} ${ADMIN_EMAIL} ${CF_SECRET_OCID} ${AUTH_SECRET_OCID} ${AUTHELIA_JWT_SECRET_OCID} ${AUTHELIA_SESSION_SECRET_OCID} ${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID} ${WG_SECRET_OCID} ${GRAFANA_SECRET_OCID} ${MONITORING_PROFILE} ${ALERT_WEBHOOK_SECRET_OCID} ${ALERT_HEARTBEAT_SECRET_OCID}' \
   > cloud-config.yaml
 
 yamllint cloud-config.yaml
@@ -102,26 +102,26 @@ sudo cloud-init modules --mode=config
 
 5. Copy each `runcmd` block from `cloud-config.yaml` and run it as root. Stop at the first error and resolve it before continuing.
 
-| Step | Block                             | Verify after                                                                                                                                                                                                                                                        |
-| ---- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | Boot volume expansion             | `df -h /` shows the expanded root filesystem                                                                                                                                                                                                                        |
-| 2    | Block storage setup               | `mountpoint /data` exits 0; `cat /etc/fstab` shows a UUID entry                                                                                                                                                                                                     |
-| 3    | Persistent directory structure    | `ls /data/` shows the expected subdirectories                                                                                                                                                                                                                       |
-| 4    | Symlinks                          | `readlink -f /etc/traefik/letsencrypt` returns `/data/traefik/letsencrypt`                                                                                                                                                                                          |
-| 5    | Traefik directories and ownership | `ls -la /etc/traefik/` shows `traefik:traefik` ownership                                                                                                                                                                                                            |
-| 6    | Container tools                   | `podman --version`; `podman images` shows wg-easy; the `authelia` user store shows Authelia                                                                                                                                                                         |
-| 7    | Vault secrets                     | `/etc/secure-stack/secret-refs/traefik.env` and `alerting.env` exist; `grafana.env` exists for UI profiles; `/run/traefik/env` and `/run/monitoring/alerting/env` exist; `/run/monitoring/grafana/env` exists for UI profiles; `/run/authelia-bootstrap.tmp` exists |
-| 8    | Authelia bootstrap                | `/data/authelia/env`, `configuration.yml`, and `users_database.yaml` exist; `/data/authelia` is owned by `authelia`                                                                                                                                                 |
-| 9    | wg-easy environment               | `/data/containers/wg-easy/env` exists and is owned by host UID `300000`; `/run/wg-bootstrap.tmp` does not exist                                                                                                                                                     |
-| 10   | SELinux contexts                  | `ausearch -m avc -ts recent \| grep -E 'traefik\|authelia'` returns nothing                                                                                                                                                                                         |
-| 10a  | Quadlet units                     | Authelia and wg-easy units exist, are enabled, and are active; `runuser -u authelia -- env XDG_RUNTIME_DIR=/run/user/$(id -u authelia) systemctl --user is-active authelia` returns `active`                                                                        |
-| 11   | System hardening                  | `getenforce` returns `Enforcing`; `systemctl is-active auditd` returns `active`                                                                                                                                                                                     |
-| 12   | Traefik binary                    | `/usr/local/bin/traefik version` prints a version                                                                                                                                                                                                                   |
-| 13   | IP forwarding                     | `sysctl net.ipv4.ip_forward` returns `1`                                                                                                                                                                                                                            |
-| 14   | Journal persistence               | `/var/log/journal/` exists                                                                                                                                                                                                                                          |
-| 15   | Firewall rules                    | `firewall-cmd --list-all` shows HTTP, HTTPS, and 51820/UDP                                                                                                                                                                                                          |
-| 16   | Service start                     | `systemctl is-active traefik wg-easy cockpit.socket pmcd pmlogger pmproxy`; the `authelia` user unit is active                                                                                                                                                      |
-| 17   | Monitoring                        | `curl -fsS http://127.0.0.1:44322/metrics` succeeds; Grafana and Valkey are active only for their profiles                                                                                                                                                          |
+| Step | Block                             | Verify after                                                                                                                                                                                                                                                                                               |
+| ---- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Boot volume expansion             | `df -h /` shows the expanded root filesystem                                                                                                                                                                                                                                                               |
+| 2    | Block storage setup               | `mountpoint /data` exits 0; `cat /etc/fstab` shows a UUID entry                                                                                                                                                                                                                                            |
+| 3    | Persistent directory structure    | `ls /data/` shows the expected subdirectories                                                                                                                                                                                                                                                              |
+| 4    | Symlinks                          | `readlink -f /etc/traefik/letsencrypt` returns `/data/traefik/letsencrypt`                                                                                                                                                                                                                                 |
+| 5    | Traefik directories and ownership | `ls -la /etc/traefik/` shows `traefik:traefik` ownership                                                                                                                                                                                                                                                   |
+| 6    | Container tools                   | `podman --version`; `podman images` shows wg-easy; the `authelia` user store shows Authelia                                                                                                                                                                                                                |
+| 7    | Vault secrets                     | `/etc/secure-stack/secret-refs/traefik.env`, `authelia.env`, and `alerting.env` exist; `grafana.env` exists for UI profiles; `/run/traefik/env`, `/run/authelia/env`, and `/run/monitoring/alerting/env` exist; `/run/monitoring/grafana/env` exists for UI profiles; `/run/authelia-bootstrap.tmp` exists |
+| 8    | Authelia bootstrap                | `/run/authelia/env`, `configuration.yml`, and `users_database.yaml` exist; `/data/authelia` is owned by `authelia`                                                                                                                                                                                         |
+| 9    | wg-easy environment               | `/data/containers/wg-easy/env` exists and is owned by host UID `300000`; `/run/wg-bootstrap.tmp` does not exist                                                                                                                                                                                            |
+| 10   | SELinux contexts                  | `ausearch -m avc -ts recent \| grep -E 'traefik\|authelia'` returns nothing                                                                                                                                                                                                                                |
+| 10a  | Quadlet units                     | Authelia and wg-easy units exist, are enabled, and are active; `runuser -u authelia -- env XDG_RUNTIME_DIR=/run/user/$(id -u authelia) systemctl --user is-active authelia` returns `active`                                                                                                               |
+| 11   | System hardening                  | `getenforce` returns `Enforcing`; `systemctl is-active auditd` returns `active`                                                                                                                                                                                                                            |
+| 12   | Traefik binary                    | `/usr/local/bin/traefik version` prints a version                                                                                                                                                                                                                                                          |
+| 13   | IP forwarding                     | `sysctl net.ipv4.ip_forward` returns `1`                                                                                                                                                                                                                                                                   |
+| 14   | Journal persistence               | `/var/log/journal/` exists                                                                                                                                                                                                                                                                                 |
+| 15   | Firewall rules                    | `firewall-cmd --list-all` shows HTTP, HTTPS, and 51820/UDP                                                                                                                                                                                                                                                 |
+| 16   | Service start                     | `systemctl is-active traefik wg-easy cockpit.socket pmcd pmlogger pmproxy`; the `authelia` user unit is active                                                                                                                                                                                             |
+| 17   | Monitoring                        | `curl -fsS http://127.0.0.1:44322/metrics` succeeds; Grafana and Valkey are active only for their profiles                                                                                                                                                                                                 |
 
 Once all blocks pass, run `sudo ./infra/host/verify-stack.sh`.
 
@@ -196,6 +196,8 @@ The script stops when `/data` is not mounted, firewalld is missing or not runnin
 ### 4.2 Authelia
 
 ```bash
+sudo systemctl status stack-secrets-authelia.service
+sudo stat -c '%U:%G %a' /run/authelia/env
 sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
   systemctl --user status authelia.service
 sudo journalctl _UID="$(id -u authelia)" -n 50
@@ -204,7 +206,7 @@ sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
   podman exec authelia authelia validate-config --config /config/configuration.yml
 ```
 
-Expected health response: `{"status":"OK"}`.
+The secret oneshot must be active, and `/run/authelia/env` must be owned by `authelia:authelia` with mode `600`. Expected health response: `{"status":"OK"}`.
 
 #### 4.2.1 Install or update Authelia
 
@@ -214,7 +216,7 @@ Run the deployment script as root from a repository checkout:
 sudo ./infra/host/04-authelia.sh
 ```
 
-The script is idempotent. It creates or repairs the `authelia` user, subordinate ID range, lingering, directories, environment file, configuration, user database, and Quadlet unit. It validates the configuration, restarts the user unit, and waits for the loopback health endpoint.
+The script is idempotent. It creates or repairs the `authelia` user, subordinate ID range, lingering, directories, Vault secret reference, secret helper and oneshot, configuration, user database, and Quadlet unit. It materializes `/run/authelia/env`, validates the configuration, restarts the user unit, and waits for the loopback health endpoint.
 
 The runtime configuration at `/data/authelia/config/configuration.yml` is preserved. To replace it with `/etc/authelia/configuration.yml`, run:
 
@@ -224,9 +226,9 @@ sudo ./infra/host/04-authelia.sh --update-config
 
 The script keeps a timestamped backup beside the runtime file before replacement.
 
-For first bootstrap, set `ADMIN_EMAIL` and either `AUTHELIA_ADMIN_PASSWORD` or `AUTHELIA_ADMIN_SECRET_OCID`. When `/etc/authelia/configuration.yml` is absent, also set `DOMAIN` so the script can render the tracked template.
+For first bootstrap, set `ADMIN_EMAIL` and either `AUTHELIA_ADMIN_PASSWORD` or `AUTHELIA_ADMIN_SECRET_OCID`. Set `AUTHELIA_JWT_SECRET_OCID`, `AUTHELIA_SESSION_SECRET_OCID`, and `AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID` to create or replace the Vault reference. When `/etc/authelia/configuration.yml` is absent, also set `DOMAIN` so the script can render the tracked template.
 
-The script stops when `/data` is not mounted, the subordinate ID range differs from `400000:65536`, or the user database is absent and no admin password source is provided. It reads the Authelia digest from `infra/manifest.lock.yaml` and writes the `10-image.conf` Quadlet drop-in.
+The script stops when `/data` is not mounted, the subordinate ID range differs from `400000:65536`, the user database is absent and no admin password source is provided, or the Vault secret OCIDs are incomplete. It reads the Authelia digest from `infra/manifest.lock.yaml` and writes the `10-image.conf` and `20-runtime.conf` Quadlet drop-ins. The second drop-in holds `PUID`, `PGID`, and `UMASK`; it holds no secret.
 
 ### 4.3 wg-easy and WireGuard
 
@@ -263,7 +265,7 @@ sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
   systemctl --user daemon-reload
 ```
 
-The Authelia unit waits for `/data` before it starts. A user unit cannot order after `local-fs.target`.
+The Authelia unit waits for `/data` and `/run/authelia/env` before it starts. A user unit cannot order after `local-fs.target` or after `stack-secrets-authelia.service`.
 
 ### 4.4 Cockpit
 
@@ -527,6 +529,7 @@ sudo ss -tlnp | grep -E ':80|:443'
 - The subordinate UID or GID range is missing, or it overlaps another service.
 - `/data/authelia/config/configuration.yml` was not copied from the template.
 - `/data/authelia` has the wrong owner or SELinux label.
+- `stack-secrets-authelia.service` failed, so `/run/authelia/env` is missing or empty.
 - The secret environment variable names are wrong.
 - The image was not pulled into the rootless store.
 
@@ -534,6 +537,9 @@ sudo ss -tlnp | grep -E ':80|:443'
 
 ```bash
 AUTHELIA_UID=$(id -u authelia)
+sudo systemctl status stack-secrets-authelia.service
+sudo journalctl -u stack-secrets-authelia -n 50
+sudo ls -l /run/authelia/env
 sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
   systemctl --user status authelia.service
 sudo journalctl _UID="${AUTHELIA_UID}" -n 50
@@ -756,7 +762,26 @@ sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
 
 Update the resulting hash in `/data/authelia/config/users_database.yaml`. No Traefik restart is needed.
 
-### 9.3 Grafana admin password
+### 9.3 Authelia runtime secrets
+
+The JWT and session secrets can rotate. The storage encryption key cannot rotate in place. A different key makes the existing database unreadable.
+
+To rotate the JWT or session secret:
+
+1. Add a new secret version in OCI Vault for `authelia-jwt-secret` or `authelia-session-secret`.
+2. Refresh the runtime values and restart Authelia:
+
+```bash
+sudo systemctl restart stack-secrets-authelia.service
+sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
+  systemctl --user restart authelia.service
+```
+
+The reference file already contains the secret OCIDs. The oneshot fetches the current Vault secret versions and rewrites `/run/authelia/env`. The Authelia unit reads the file only at start.
+
+For the storage encryption key, use the Authelia `storage encryption change-key` command before you add a new Vault secret version. Keep the old key until the command completes and the health check passes. Do not change the key without a verified database backup. The deployment compares the Vault key with `/data/authelia/env` and stops on a mismatch. After a verified re-encryption, update the legacy key or remove `/data/authelia/env`.
+
+### 9.4 Grafana admin password
 
 1. Update the `grafana-admin-password` secret in OCI Vault.
 2. Refresh the runtime value and restart Grafana:
@@ -768,7 +793,7 @@ sudo systemctl restart grafana-server
 
 The reference file already contains the secret OCID. Changing `GF_SECURITY_ADMIN_PASSWORD` does not change an existing Grafana admin password in the database. Use the Grafana user administration page to change the stored password, or reset it with `grafana-cli` after confirming the supported syntax for the installed version.
 
-### 9.4 Alert webhook and heartbeat URLs
+### 9.5 Alert webhook and heartbeat URLs
 
 1. Create a new webhook URL or heartbeat URL at the provider.
 2. Add a new secret version in OCI Vault for `alert-webhook-url` or `alert-heartbeat-url`.
@@ -793,6 +818,8 @@ A leaked webhook URL permits alert injection. Rotate it immediately if the URL a
 4. Update the Cloudflare A records to the new public IP.
 5. Cloud-init detects the existing block volume data and skips destructive steps.
 6. Services start with persistent state intact.
+
+The Authelia storage encryption key in OCI Vault must match the existing database. A mismatch stops cloud-init before Authelia starts.
 
 Total downtime is the interval between old instance termination and the new instance reaching `cloud-init status: done`, typically 5 to 8 minutes.
 
@@ -899,7 +926,9 @@ ls -l /usr/local/bin/traefik
 ls -ld /data/traefik /data/logs/traefik /etc/traefik
 ls -l /data/traefik/letsencrypt/acme.json
 ls -l /etc/secure-stack/secret-refs/traefik.env
+ls -l /etc/secure-stack/secret-refs/authelia.env
 ls -l /run/traefik/env
+ls -l /run/authelia/env
 id traefik
 id authelia
 loginctl show-user authelia -p Linger
@@ -911,7 +940,7 @@ ls -ld /etc/secure-stack/secret-refs
 ls -l /run/monitoring/alerting/env
 id alerting
 getent passwd alerting
-systemctl status stack-secrets-traefik stack-secrets-alerting stack-secrets-grafana pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+systemctl status stack-secrets-traefik stack-secrets-authelia stack-secrets-alerting stack-secrets-grafana pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 ls -l /etc/containers/systemd/wg-easy.container
 sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
   systemctl --user is-active authelia.service
@@ -929,7 +958,9 @@ Expected posture:
 - `/data/containers/wg-easy` is owned by host UID and GID `300000`.
 - `/data/traefik/letsencrypt/acme.json` is mode `0600`.
 - `/etc/secure-stack/secret-refs/traefik.env` is mode `0600` and owned by `root:root`.
+- `/etc/secure-stack/secret-refs/authelia.env` is mode `0600` and owned by `root:root`.
 - `/run/traefik/env` is mode `0600` and owned by `traefik:traefik`.
+- `/run/authelia/env` is mode `0600` and owned by `authelia:authelia`.
 - `/run/monitoring/grafana/env` is mode `0600` and owned by `grafana:grafana`.
 - `/run/monitoring/alerting/env` is mode `0600` and owned by `alerting:alerting`.
 - The alerting user has no login shell and the alerting timers are active.

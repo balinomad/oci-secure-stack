@@ -3,7 +3,7 @@ name: "OCI Secure Stack Delivery Plan"
 description: |
   Decision-first plan for resuming work, with phases, tasks, gates, estimates, and immediate next actions.
 status: active
-version: 1.8
+version: 1.9
 updated: 2026-11-15
 ---
 
@@ -72,6 +72,7 @@ Only findings that follow from confirmed decisions are fixed here.
 - [ ] C11 F15: verify version pins against upstream.
 - [x] C12 F24: update stale README, `.env.example`, and `CONTRIBUTING.md` paths.
 - [ ] C13 Phase 3: deliver Traefik, Grafana, and Alerting runtime secrets from `/run` with per-service oneshot units. Static implementation is complete; reboot, rotation, Vault-failure, and permission gates are pending.
+- [ ] C14 Phase 4: deliver Authelia JWT, session, and storage encryption secrets from `/run` with a oneshot unit. Static implementation is complete; the storage-key comparison, reboot, rotation, Vault-failure, and permission gates are pending.
 
 Gate GC: static validation green, every P0 finding closed or explicitly deferred with a decision reference.
 

@@ -3,7 +3,7 @@ name: "Infrastructure Reference"
 description: |
   Exact template variables, OCI network rules, DNS records, Vault secrets, persistent storage layout, and reserved ports for the stack.
 status: draft
-version: 1.6
+version: 1.7
 updated: 2026-11-15
 ---
 
@@ -15,18 +15,21 @@ This page documents the OCI infrastructure and host baseline for the stack. See 
 
 `infra/cloud-init/cloud-config.template.yaml` uses `${VARIABLE}` syntax for site-specific values. All other `${...}` references inside `runcmd` blocks are shell variables and must remain unsubstituted.
 
-| Variable                         | Description                                             | Example                       |
-| -------------------------------- | ------------------------------------------------------- | ----------------------------- |
-| `${DOMAIN}`                      | Base domain for all subdomains                          | `example.com`                 |
-| `${ACME_EMAIL}`                  | Email for Let's Encrypt expiry notices                  | `ops@example.com`             |
-| `${ADMIN_EMAIL}`                 | Authelia admin user email                               | `admin@example.com`           |
-| `${CF_SECRET_OCID}`              | OCID of the Cloudflare token secret in OCI Vault        | `ocid1.vaultsecret.oc1..xxxx` |
-| `${AUTH_SECRET_OCID}`            | OCID of the Authelia admin password secret in OCI Vault | `ocid1.vaultsecret.oc1..yyyy` |
-| `${WG_SECRET_OCID}`              | OCID of the wg-easy admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..zzzz` |
-| `${GRAFANA_SECRET_OCID}`         | OCID of the Grafana admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..gggg` |
-| `${ALERT_WEBHOOK_SECRET_OCID}`   | OCID of the alert webhook secret in OCI Vault           | `ocid1.vaultsecret.oc1..aaaa` |
-| `${ALERT_HEARTBEAT_SECRET_OCID}` | OCID of the alert heartbeat secret in OCI Vault         | `ocid1.vaultsecret.oc1..bbbb` |
-| `${MONITORING_PROFILE}`          | Monitoring profile: `live`, `history`, or `none`        | `live`                        |
+| Variable                                  | Description                                              | Example                       |
+| ----------------------------------------- | -------------------------------------------------------- | ----------------------------- |
+| `${DOMAIN}`                               | Base domain for all subdomains                           | `example.com`                 |
+| `${ACME_EMAIL}`                           | Email for Let's Encrypt expiry notices                   | `ops@example.com`             |
+| `${ADMIN_EMAIL}`                          | Authelia admin user email                                | `admin@example.com`           |
+| `${CF_SECRET_OCID}`                       | OCID of the Cloudflare token secret in OCI Vault         | `ocid1.vaultsecret.oc1..xxxx` |
+| `${AUTH_SECRET_OCID}`                     | OCID of the Authelia admin password secret in OCI Vault  | `ocid1.vaultsecret.oc1..yyyy` |
+| `${AUTHELIA_JWT_SECRET_OCID}`             | OCID of the Authelia JWT secret in OCI Vault             | `ocid1.vaultsecret.oc1..jjjj` |
+| `${AUTHELIA_SESSION_SECRET_OCID}`         | OCID of the Authelia session secret in OCI Vault         | `ocid1.vaultsecret.oc1..ssss` |
+| `${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID}` | OCID of the Authelia storage encryption key in OCI Vault | `ocid1.vaultsecret.oc1..kkkk` |
+| `${WG_SECRET_OCID}`                       | OCID of the wg-easy admin password secret in OCI Vault   | `ocid1.vaultsecret.oc1..zzzz` |
+| `${GRAFANA_SECRET_OCID}`                  | OCID of the Grafana admin password secret in OCI Vault   | `ocid1.vaultsecret.oc1..gggg` |
+| `${ALERT_WEBHOOK_SECRET_OCID}`            | OCID of the alert webhook secret in OCI Vault            | `ocid1.vaultsecret.oc1..aaaa` |
+| `${ALERT_HEARTBEAT_SECRET_OCID}`          | OCID of the alert heartbeat secret in OCI Vault          | `ocid1.vaultsecret.oc1..bbbb` |
+| `${MONITORING_PROFILE}`                   | Monitoring profile: `live`, `history`, or `none`         | `live`                        |
 
 `${GRAFANA_SECRET_OCID}` is required when `${MONITORING_PROFILE}` is `live` or `history`. The two alert secret OCIDs are required in every profile.
 
@@ -65,14 +68,17 @@ Admin subdomains must be DNS Only. Cloudflare proxying makes Cloudflare IPs appe
 
 ## 4. OCI Vault secrets
 
-| Secret name                | Purpose                         | Variable                         |
-| -------------------------- | ------------------------------- | -------------------------------- |
-| `traefik-cloudflare-token` | ACME DNS-01 challenge           | `${CF_SECRET_OCID}`              |
-| `authelia-admin-password`  | Initial Authelia admin password | `${AUTH_SECRET_OCID}`            |
-| `wg-easy-admin-password`   | Initial wg-easy admin password  | `${WG_SECRET_OCID}`              |
-| `grafana-admin-password`   | Grafana admin password          | `${GRAFANA_SECRET_OCID}`         |
-| `alert-webhook-url`        | HTTPS alert delivery webhook    | `${ALERT_WEBHOOK_SECRET_OCID}`   |
-| `alert-heartbeat-url`      | External heartbeat endpoint     | `${ALERT_HEARTBEAT_SECRET_OCID}` |
+| Secret name                       | Purpose                         | Variable                                  |
+| --------------------------------- | ------------------------------- | ----------------------------------------- |
+| `traefik-cloudflare-token`        | ACME DNS-01 challenge           | `${CF_SECRET_OCID}`                       |
+| `authelia-admin-password`         | Initial Authelia admin password | `${AUTH_SECRET_OCID}`                     |
+| `authelia-jwt-secret`             | Authelia JWT signing secret     | `${AUTHELIA_JWT_SECRET_OCID}`             |
+| `authelia-session-secret`         | Authelia session signing secret | `${AUTHELIA_SESSION_SECRET_OCID}`         |
+| `authelia-storage-encryption-key` | Authelia SQLite encryption key  | `${AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID}` |
+| `wg-easy-admin-password`          | Initial wg-easy admin password  | `${WG_SECRET_OCID}`                       |
+| `grafana-admin-password`          | Grafana admin password          | `${GRAFANA_SECRET_OCID}`                  |
+| `alert-webhook-url`               | HTTPS alert delivery webhook    | `${ALERT_WEBHOOK_SECRET_OCID}`            |
+| `alert-heartbeat-url`             | External heartbeat endpoint     | `${ALERT_HEARTBEAT_SECRET_OCID}`          |
 
 IAM policy:
 
@@ -145,12 +151,13 @@ The root helper `/usr/local/libexec/stack-secret-env` reads a reference file, fe
 | Service  | Reference file                               | Runtime file                   | Oneshot unit                     |
 | -------- | -------------------------------------------- | ------------------------------ | -------------------------------- |
 | Traefik  | `/etc/secure-stack/secret-refs/traefik.env`  | `/run/traefik/env`             | `stack-secrets-traefik.service`  |
+| Authelia | `/etc/secure-stack/secret-refs/authelia.env` | `/run/authelia/env`            | `stack-secrets-authelia.service` |
 | Grafana  | `/etc/secure-stack/secret-refs/grafana.env`  | `/run/monitoring/grafana/env`  | `stack-secrets-grafana.service`  |
 | Alerting | `/etc/secure-stack/secret-refs/alerting.env` | `/run/monitoring/alerting/env` | `stack-secrets-alerting.service` |
 
-Each consumer unit declares `Requires=` and `After=` for its oneshot unit. The oneshot writes a new file after every boot. `/run` is tmpfs, so the runtime values do not persist across a reboot or a block-volume backup.
+Root system consumer units declare `Requires=` and `After=` for their oneshot unit. Authelia is a rootless user unit, so cross-manager ordering is unreliable. Its `authelia.container` waits for `/run/authelia/env` in an `ExecStartPre` loop. The oneshot writes a new file after every boot. `/run` is tmpfs, so the runtime values do not persist across a reboot or a block-volume backup.
 
-Authelia and wg-easy keep persistent environment files until ADR-012 Phase 4 and D10 close. Those files are `/data/authelia/env` and `/data/containers/wg-easy/env`.
+wg-easy keeps a persistent environment file until D10 closes. The file is `/data/containers/wg-easy/env`. Authelia keeps `/data/authelia/env` unchanged only as the rollback source until the Vault-backed path has one successful boot and health check.
 
 ## 6. Reserved ports
 

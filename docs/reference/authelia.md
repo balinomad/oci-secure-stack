@@ -3,8 +3,8 @@ name: "Authelia Reference"
 description: |
   Exact Authelia runtime, authentication, storage, session, secret, and access-control configuration, including the conditions for adding Valkey session storage.
 status: draft
-version: 1.3
-updated: 2026-11-14
+version: 1.4
+updated: 2026-11-15
 ---
 
 # Authelia Reference
@@ -21,12 +21,12 @@ Authelia runs as a rootless Podman Quadlet user unit under the dedicated `authel
 | Published port | `127.0.0.1:9091`                                                               |
 | Configuration  | `/data/authelia/config/configuration.yml`                                      |
 | Database       | `/data/authelia/db/authelia.sqlite3`                                           |
-| Environment    | `/data/authelia/env`                                                           |
+| Environment    | `/run/authelia/env`                                                            |
 | Data volume    | `/data/authelia`                                                               |
 
-The unit uses `UserNS=keep-id`, `NoNewPrivileges=true`, and `ReadOnly=true`. It waits for the `/data` mount before it starts. The rootless user unit cannot order after `local-fs.target`, so the wait is an `ExecStartPre` loop.
+The unit uses `UserNS=keep-id`, `NoNewPrivileges=true`, and `ReadOnly=true`. It waits for the `/data` mount and for `/run/authelia/env` before it starts. The rootless user unit cannot order after `local-fs.target` or after the root secret unit, so both waits are `ExecStartPre` loops.
 
-The deployment writes a `10-image.conf` drop-in under `authelia.container.d`. The drop-in overrides the base unit tag with the locked digest. `infra/host/04-authelia.sh` writes the same drop-in on repair.
+The deployment writes a `10-image.conf` and a `20-runtime.conf` drop-in under `authelia.container.d`. The first drop-in overrides the base unit tag with the locked digest. The second sets `PUID`, `PGID`, and `UMASK`, which are not secrets. `infra/host/04-authelia.sh` writes both drop-ins on repair.
 
 ## 2. Configuration source
 
@@ -56,12 +56,12 @@ The deployment creates the `admin` user on first boot. It takes the initial pass
 
 Authelia uses the local SQLite storage provider.
 
-| Property       | Value                                                     |
-| -------------- | --------------------------------------------------------- |
-| Container path | `/data/authelia.sqlite3`                                  |
-| Host path      | `/data/authelia/db/authelia.sqlite3`                      |
-| Directory mode | `0700`                                                    |
-| Encryption key | `AUTHELIA_STORAGE_ENCRYPTION_KEY` in `/data/authelia/env` |
+| Property       | Value                                                    |
+| -------------- | -------------------------------------------------------- |
+| Container path | `/data/authelia.sqlite3`                                 |
+| Host path      | `/data/authelia/db/authelia.sqlite3`                     |
+| Directory mode | `0700`                                                   |
+| Encryption key | `AUTHELIA_STORAGE_ENCRYPTION_KEY` in `/run/authelia/env` |
 
 The Quadlet unit maps `/data/authelia/db` to `/data` inside the container. The SQLite file holds durable Authelia state, including TOTP secrets and registered two-factor devices. It does not store the active session records. Include `/data/authelia/db` in the block-volume backup scope.
 
@@ -81,7 +81,7 @@ The session configuration uses one cookie domain.
 | Expiration   | 1 hour                   |
 | Remember me  | 1 week                   |
 
-Authelia 4.39 uses the in-memory session provider when no `session.redis` block exists. The stack does not configure a session provider. Active sessions are therefore lost when Authelia restarts or when the VM is replaced. The session secret in `/data/authelia/env` persists, so the user must authenticate again but does not lose TOTP enrollment, users, or other durable state.
+Authelia 4.39 uses the in-memory session provider when no `session.redis` block exists. The stack does not configure a session provider. Active sessions are therefore lost when Authelia restarts or when the VM is replaced. The session secret in `/run/authelia/env` is materialized from OCI Vault after every boot, so the user must authenticate again but does not lose TOTP enrollment, users, or other durable state.
 
 This behavior is intentional for the single-instance deployment. Losing active sessions is a safe failure mode.
 
@@ -99,15 +99,17 @@ Traefik delegates authentication to Authelia through the ForwardAuth endpoint. T
 
 ## 7. Secrets
 
-The deployment generates these values on first boot and stores them in `/data/authelia/env` with mode `0600`:
+The three runtime secrets are stored in OCI Vault and materialized after every boot:
 
 - `AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET`
 - `AUTHELIA_SESSION_SECRET`
 - `AUTHELIA_STORAGE_ENCRYPTION_KEY`
-- `PUID` and `PGID`
-- `UMASK=0077`
 
-Do not store these values in the repository, the manifest, or the configuration template.
+The deployment writes OCID references to `/etc/secure-stack/secret-refs/authelia.env`. `stack-secrets-authelia.service` fetches the values and writes `/run/authelia/env` with mode `0600` and owner `authelia:authelia`. `PUID`, `PGID`, and `UMASK=0077` are not secrets and are written to the Quadlet `20-runtime.conf` drop-in.
+
+Before Authelia starts, cloud-init and `04-authelia.sh` compare the Vault storage encryption key with `/data/authelia/env` when that legacy file exists. A mismatch stops the service.
+
+Do not store these values in the repository, the manifest, or the configuration template. The legacy file `/data/authelia/env` is not modified after the Vault migration. It remains the rollback source until the first successful Vault-backed boot and health check.
 
 ## 8. Session persistence alternative with Valkey
 
@@ -160,13 +162,14 @@ The script performs these actions:
 - Enforces the subordinate UID and GID range `400000:65536`.
 - Enables lingering and waits for the user manager runtime directory.
 - Creates `/data/authelia`, `config`, and `db` with `0700` permissions.
-- Creates or repairs `/data/authelia/env` with the required secrets and `PUID`, `PGID`, and `UMASK`.
+- Installs the `stack-secret-env` helper, the Authelia secret reference, and the `stack-secrets-authelia.service` oneshot.
+- Materializes `/run/authelia/env` from OCI Vault and verifies its owner, mode, and keys.
 - Installs `/etc/authelia/configuration.yml` and preserves `/data/authelia/config/configuration.yml`.
 - Creates the admin user when `users_database.yaml` is absent.
 - Migrates `db.sqlite3`, `storage.sqlite`, or `storage.sqlite3` to `authelia.sqlite3`.
 - Installs the Quadlet unit, validates the configuration, restarts the service, and checks `/api/health`.
 
-Set `ADMIN_EMAIL` and either `AUTHELIA_ADMIN_PASSWORD` or `AUTHELIA_ADMIN_SECRET_OCID` for a first bootstrap. When `/etc/authelia/configuration.yml` is absent, set `DOMAIN` so the script can render `infra/configs/authelia/configuration.yml`.
+Set `ADMIN_EMAIL` and either `AUTHELIA_ADMIN_PASSWORD` or `AUTHELIA_ADMIN_SECRET_OCID` for a first bootstrap. Set `AUTHELIA_JWT_SECRET_OCID`, `AUTHELIA_SESSION_SECRET_OCID`, and `AUTHELIA_STORAGE_ENCRYPTION_KEY_OCID` to create or replace the Vault reference. When `/etc/authelia/configuration.yml` is absent, set `DOMAIN` so the script can render `infra/configs/authelia/configuration.yml`.
 
 Use `--update-config` to replace the runtime configuration with the staged copy. The script keeps a timestamped backup beside the runtime file first.
 
@@ -177,6 +180,8 @@ The script does not modify the `/data` mount configuration or firewall rules.
 Run these checks as the `authelia` user or with `runuser`:
 
 ```bash
+sudo systemctl status stack-secrets-authelia.service
+sudo stat -c '%U:%G %a' /run/authelia/env
 AUTHELIA_UID=$(id -u authelia)
 sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
   systemctl --user status authelia.service
@@ -185,7 +190,7 @@ sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/${AUTHELIA_UID}" \
 curl -fsS http://127.0.0.1:9091/api/health
 ```
 
-The data directories must be owned by `authelia:authelia`, and `/data/authelia` must use the SELinux label required for container access.
+The secret oneshot must be active. `/run/authelia/env` must be owned by `authelia:authelia` with mode `600`. The data directories must be owned by `authelia:authelia`, and `/data/authelia` must use the SELinux label required for container access.
 
 ## 11. References
 
