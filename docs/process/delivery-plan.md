@@ -3,8 +3,8 @@ name: "OCI Secure Stack Delivery Plan"
 description: |
   Decision-first plan for resuming work, with phases, tasks, gates, estimates, and immediate next actions.
 status: active
-version: 1.5
-updated: 2026-11-14
+version: 1.6
+updated: 2026-11-15
 ---
 
 # OCI Secure Stack Delivery Plan
@@ -58,11 +58,9 @@ Gate GA: every goal has a named maintainer, a testable criterion, and no unresol
 
 ## Phase B: Repository recovery (0.5 day)
 
-- [ ] B1 Move research and planning out of the ignored `docs/tmp/` into tracked paths. Commit `4a0a2ff` moved them once, but the current copies under `tmp/` are ignored again.
-- [x] B2 Resolve the uncommitted deletion and `.gitignore` change in one commit. (commit `4a0a2ff`)
-- [ ] B3 Tag `v0.1.0-pre-resume`.
-- [ ] B4 Create branch `work/decision-baseline`.
-- [x] B5 Record the consolidated documentation state in `docs/process/project-status.md`.
+- [ ] B1 Tag `v0.1.0-pre-resume`.
+- [ ] B2 Create branch `work/decision-baseline`.
+- [x] B3 Record the consolidated documentation state in `docs/process/project-status.md`.
 
 Gate GB: clean working tree, decisions tracked, baseline tagged.
 
@@ -96,7 +94,6 @@ Gate GC: static validation green, every P0 finding closed or explicitly deferred
 - [ ] D7 Rerun cloud-init modules and confirm idempotency.
 - [ ] D8 Perform a VM replacement drill with the same block volume.
 - [ ] D9 Perform a backup and restore drill if ADR-006 includes it.
-- [ ] D10 Archive evidence under `tmp/unverified/` or in the findings register.
 
 Gate GD: `infra/host/verify-stack.sh` exits 0 and every item in `docs/process/acceptance-criteria.md` is proven.
 
@@ -108,6 +105,8 @@ Gate GD: `infra/host/verify-stack.sh` exits 0 and every item in `docs/process/ac
 - [x] E4 Convert infrastructure containers to Quadlet per ADR-009.
 - [ ] E5 Clean-room deploy from the refactored tree.
 - [ ] E6 Compare behaviour with the Phase D baseline.
+- [ ] E7 Extract the linear checks in `infra/host/verify-stack.sh` into section functions in the same file, with one `main` entrypoint. Preserve output, counters, root check, and exit code. Defer any module directory until a separate layout decision names it.
+- [ ] E8 Evaluate whether modularizing `infra/host/deploy-service.sh` is beneficial after F11, F13, F14, and F29 close.
 
 Gate GE: parity with the Phase D baseline. No regression.
 

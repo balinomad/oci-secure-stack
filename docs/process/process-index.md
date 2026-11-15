@@ -3,8 +3,8 @@ name: "Process Record"
 description: |
   Index and maintenance rules for the project process record, including the status legend and evidence rules.
 status: active
-version: 1.9
-updated: 2026-11-14
+version: 1.10
+updated: 2026-11-15
 ---
 
 # Process Record
@@ -73,7 +73,6 @@ Method: static analysis of repository files. No OCI deployment has been executed
 2. A decision is authoritative only when it is tracked in git and has a decision ID.
 3. Findings keep their original IDs. Do not renumber. Mark them `Fixed` with the commit or test evidence.
 4. Do not update a finding to `Fixed` because the code looks correct. Update it after a deployment test passes.
-5. Do not delete a record to hide an unresolved problem. Move superseded material to `tmp/unverified/` and mark its status.
 
 ## Documentation state
 

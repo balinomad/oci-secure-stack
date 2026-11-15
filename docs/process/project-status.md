@@ -3,8 +3,8 @@ name: "Project Status Report"
 description: |
   Static assessment of repository state, documentation state, implementation status, risks, and explicit non-claims.
 status: active
-version: 1.8
-updated: 2026-11-14
+version: 1.9
+updated: 2026-11-15
 ---
 
 # Project Status Report
@@ -38,7 +38,7 @@ This report covers the project defined in `docs/architecture.md`. It records rep
 | Modular deploy scripts | Partial                             | `00-02` and `06` empty; `03-traefik`, `04-authelia`, `07-monitoring`, `08-alerting` active |
 | Extracted configs      | Populated, manifest and renderer    | `infra/manifest.yaml`; `tools/render-config.sh --check`                                    |
 | Documentation          | Consolidated, no empty placeholders | `README.md`, `docs/`                                                                       |
-| Planning and research  | Substantive, kept as evidence       | `tmp/unverified/`, `tmp/legacy/work-plan.md`                                               |
+| Planning and research  | Tracked current plan                | `docs/process/delivery-plan.md`; `docs/architecture.md`                                    |
 | CI                     | None                                | `.github/workflows` empty                                                                  |
 | Changelog or releases  | None                                | No `CHANGELOG.md`, no tags                                                                 |
 
@@ -47,21 +47,18 @@ This report covers the project defined in `docs/architecture.md`. It records rep
 - Branch `master` tracks `origin/master`, remote `github.com/balinomad/oci-secure-stack`.
 - Last commit before the documentation consolidation: `2c1ae2c`, 2026-11-12.
 - The consolidation is uncommitted until the next commit.
-- Research and planning files are kept under `tmp/unverified/` and `tmp/legacy/`.
-- Legacy source documents are kept under `tmp/legacy/` until the migration is verified.
 
 ## Documentation state
 
-| Document                  | Role                                                         | Status                        |
-| ------------------------- | ------------------------------------------------------------ | ----------------------------- |
-| `README.md`               | Front door and documentation map                             | Current, design unverified    |
-| `docs/architecture.md`    | Sole design record                                           | Draft, needs confirmation     |
-| `docs/decisions/`         | Decision records                                             | Draft                         |
-| `docs/guides/`            | Deploy, operate, extend                                      | Draft, derived from legacy    |
-| `docs/reference/`         | Exact configuration facts                                    | Draft, derived from legacy    |
-| `docs/process/`           | Living status, issue log, delivery plan, acceptance criteria | Active                        |
-| `tmp/unverified/`         | Point-in-time audits and migration map                       | Historical evidence           |
-| `tmp/legacy/work-plan.md` | Legacy implementation work plan                              | Unverified, not authoritative |
+| Document                        | Role                                                         | Status                              |
+| ------------------------------- | ------------------------------------------------------------ | ----------------------------------- |
+| `README.md`                     | Front door and documentation map                             | Current, design unverified          |
+| `docs/architecture.md`          | Sole design record                                           | Draft, needs confirmation           |
+| `docs/decisions/`               | Decision records                                             | Draft                               |
+| `docs/guides/`                  | Deploy, operate, extend                                      | Draft, derived from legacy          |
+| `docs/reference/`               | Exact configuration facts                                    | Draft, derived from legacy          |
+| `docs/process/`                 | Living status, issue log, delivery plan, acceptance criteria | Active                              |
+| `docs/process/delivery-plan.md` | Current implementation plan                                  | Active, supersedes legacy work plan |
 
 The documentation has no empty placeholders. The guides describe the intended design; they do not prove deployment behaviour.
 
