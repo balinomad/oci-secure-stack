@@ -3,7 +3,7 @@ name: "Operations"
 description: |
   Operational runbook for verifying, testing, maintaining, backing up, replacing, and troubleshooting the OCI secure stack.
 status: draft
-version: 1.9
+version: 1.10
 updated: 2026-11-15
 ---
 
@@ -102,26 +102,26 @@ sudo cloud-init modules --mode=config
 
 5. Copy each `runcmd` block from `cloud-config.yaml` and run it as root. Stop at the first error and resolve it before continuing.
 
-| Step | Block                             | Verify after                                                                                                                                                                                 |
-| ---- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | Boot volume expansion             | `df -h /` shows the expanded root filesystem                                                                                                                                                 |
-| 2    | Block storage setup               | `mountpoint /data` exits 0; `cat /etc/fstab` shows a UUID entry                                                                                                                              |
-| 3    | Persistent directory structure    | `ls /data/` shows the expected subdirectories                                                                                                                                                |
-| 4    | Symlinks                          | `readlink -f /etc/traefik/letsencrypt` returns `/data/traefik/letsencrypt`                                                                                                                   |
-| 5    | Traefik directories and ownership | `ls -la /etc/traefik/` shows `traefik:traefik` ownership                                                                                                                                     |
-| 6    | Container tools                   | `podman --version`; `podman images` shows wg-easy; the `authelia` user store shows Authelia                                                                                                  |
-| 7    | Vault secrets                     | `/etc/traefik/env` contains `CF_DNS_API_TOKEN`; `/run/authelia-bootstrap.tmp` exists; `/run/grafana-bootstrap.tmp` exists for UI profiles                                                    |
-| 8    | Authelia bootstrap                | `/data/authelia/env`, `configuration.yml`, and `users_database.yaml` exist; `/data/authelia` is owned by `authelia`                                                                          |
-| 9    | wg-easy environment               | `/data/containers/wg-easy/env` exists and is owned by host UID `300000`; `/run/wg-bootstrap.tmp` does not exist                                                                              |
-| 10   | SELinux contexts                  | `ausearch -m avc -ts recent \| grep -E 'traefik\|authelia'` returns nothing                                                                                                                  |
-| 10a  | Quadlet units                     | Authelia and wg-easy units exist, are enabled, and are active; `runuser -u authelia -- env XDG_RUNTIME_DIR=/run/user/$(id -u authelia) systemctl --user is-active authelia` returns `active` |
-| 11   | System hardening                  | `getenforce` returns `Enforcing`; `systemctl is-active auditd` returns `active`                                                                                                              |
-| 12   | Traefik binary                    | `/usr/local/bin/traefik version` prints a version                                                                                                                                            |
-| 13   | IP forwarding                     | `sysctl net.ipv4.ip_forward` returns `1`                                                                                                                                                     |
-| 14   | Journal persistence               | `/var/log/journal/` exists                                                                                                                                                                   |
-| 15   | Firewall rules                    | `firewall-cmd --list-all` shows HTTP, HTTPS, and 51820/UDP                                                                                                                                   |
-| 16   | Service start                     | `systemctl is-active traefik wg-easy cockpit.socket pmcd pmlogger pmproxy`; the `authelia` user unit is active                                                                               |
-| 17   | Monitoring                        | `curl -fsS http://127.0.0.1:44322/metrics` succeeds; Grafana and Valkey are active only for their profiles                                                                                   |
+| Step | Block                             | Verify after                                                                                                                                                                                                                                                        |
+| ---- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | Boot volume expansion             | `df -h /` shows the expanded root filesystem                                                                                                                                                                                                                        |
+| 2    | Block storage setup               | `mountpoint /data` exits 0; `cat /etc/fstab` shows a UUID entry                                                                                                                                                                                                     |
+| 3    | Persistent directory structure    | `ls /data/` shows the expected subdirectories                                                                                                                                                                                                                       |
+| 4    | Symlinks                          | `readlink -f /etc/traefik/letsencrypt` returns `/data/traefik/letsencrypt`                                                                                                                                                                                          |
+| 5    | Traefik directories and ownership | `ls -la /etc/traefik/` shows `traefik:traefik` ownership                                                                                                                                                                                                            |
+| 6    | Container tools                   | `podman --version`; `podman images` shows wg-easy; the `authelia` user store shows Authelia                                                                                                                                                                         |
+| 7    | Vault secrets                     | `/etc/secure-stack/secret-refs/traefik.env` and `alerting.env` exist; `grafana.env` exists for UI profiles; `/run/traefik/env` and `/run/monitoring/alerting/env` exist; `/run/monitoring/grafana/env` exists for UI profiles; `/run/authelia-bootstrap.tmp` exists |
+| 8    | Authelia bootstrap                | `/data/authelia/env`, `configuration.yml`, and `users_database.yaml` exist; `/data/authelia` is owned by `authelia`                                                                                                                                                 |
+| 9    | wg-easy environment               | `/data/containers/wg-easy/env` exists and is owned by host UID `300000`; `/run/wg-bootstrap.tmp` does not exist                                                                                                                                                     |
+| 10   | SELinux contexts                  | `ausearch -m avc -ts recent \| grep -E 'traefik\|authelia'` returns nothing                                                                                                                                                                                         |
+| 10a  | Quadlet units                     | Authelia and wg-easy units exist, are enabled, and are active; `runuser -u authelia -- env XDG_RUNTIME_DIR=/run/user/$(id -u authelia) systemctl --user is-active authelia` returns `active`                                                                        |
+| 11   | System hardening                  | `getenforce` returns `Enforcing`; `systemctl is-active auditd` returns `active`                                                                                                                                                                                     |
+| 12   | Traefik binary                    | `/usr/local/bin/traefik version` prints a version                                                                                                                                                                                                                   |
+| 13   | IP forwarding                     | `sysctl net.ipv4.ip_forward` returns `1`                                                                                                                                                                                                                            |
+| 14   | Journal persistence               | `/var/log/journal/` exists                                                                                                                                                                                                                                          |
+| 15   | Firewall rules                    | `firewall-cmd --list-all` shows HTTP, HTTPS, and 51820/UDP                                                                                                                                                                                                          |
+| 16   | Service start                     | `systemctl is-active traefik wg-easy cockpit.socket pmcd pmlogger pmproxy`; the `authelia` user unit is active                                                                                                                                                      |
+| 17   | Monitoring                        | `curl -fsS http://127.0.0.1:44322/metrics` succeeds; Grafana and Valkey are active only for their profiles                                                                                                                                                          |
 
 Once all blocks pass, run `sudo ./infra/host/verify-stack.sh`.
 
@@ -185,11 +185,11 @@ Run the deployment script as root from a repository checkout:
 sudo ./infra/host/03-traefik.sh
 ```
 
-The script is idempotent. It creates or repairs the `traefik` user, `/data/traefik/letsencrypt`, `/data/logs/traefik`, the two persistent-storage symlinks, the environment file, missing configuration, locked release values from `infra/manifest.lock.yaml`, systemd unit, and logrotate file. It verifies the release SHA256 before installing the binary, opens TCP 80 and 443, and waits for the loopback health endpoints.
+The script is idempotent. It creates or repairs the `traefik` user, `/data/traefik/letsencrypt`, `/data/logs/traefik`, the two persistent-storage symlinks, the secret reference file, missing configuration, locked release values from `infra/manifest.lock.yaml`, the systemd units, and the logrotate file. It verifies the release SHA256 before installing the binary, opens TCP 80 and 443, and waits for the loopback health endpoints.
 
 Existing Traefik configuration files under `/etc/traefik` are preserved. To replace one, delete it or render it from `infra/configs/traefik` and rerun the script.
 
-Set `DOMAIN` and `ACME_EMAIL` when a configuration file is absent. Set `CF_DNS_API_TOKEN` or `CF_SECRET_OCID` when `/etc/traefik/env` is absent or contains the placeholder.
+Set `DOMAIN` and `ACME_EMAIL` when a configuration file is absent. Set `CF_SECRET_OCID` when `/etc/secure-stack/secret-refs/traefik.env` is absent. The script writes the OCID to the reference file and starts `stack-secrets-traefik.service`.
 
 The script stops when `/data` is not mounted, firewalld is missing or not running, a configuration file still contains a placeholder, or a legacy real directory at `/etc/traefik/letsencrypt` or `/var/log/traefik` contains data.
 
@@ -375,13 +375,13 @@ For a rootless application, run the same command as its service user. Grafana do
 Check the alerting components:
 
 ```bash
-systemctl status pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+systemctl status stack-secrets-alerting.service pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 sudo runuser -u alerting -- pmie -C -c /etc/pcp/pmie/stack-alerts.pmie
-ls -l /data/monitoring/alerting/env
+ls -l /run/monitoring/alerting/env
 systemctl list-timers pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 ```
 
-Expected: the service and all timers are active, `pmie` accepts the rules, and the environment file is owned by `alerting` with mode `0600`.
+Expected: the service and all timers are active, `pmie` accepts the rules, and the runtime environment file is owned by `alerting` with mode `0600`.
 
 Send a test alert:
 
@@ -396,21 +396,21 @@ The external heartbeat is the only control that detects total instance loss. Con
 To disable alert delivery:
 
 ```bash
-sudo systemctl disable --now pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+sudo systemctl disable --now stack-secrets-alerting.service pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 ```
 
-Re-enable it with `sudo ./infra/host/08-alerting.sh`. The helper preserves an existing `/data/monitoring/alerting/env`.
+Re-enable it with `sudo ./infra/host/08-alerting.sh`. The helper preserves an existing `/etc/secure-stack/secret-refs/alerting.env`.
 
 If no alert arrives, check:
 
 ```bash
-sudo journalctl -u pcp-alert-pmie -u pcp-alert-notify@test.service -n 50
-sudo systemctl status pcp-alert-pmie
-sudo ls -l /data/monitoring/alerting/env
+sudo journalctl -u stack-secrets-alerting -u pcp-alert-pmie -u pcp-alert-notify@test.service -n 50
+sudo systemctl status stack-secrets-alerting pcp-alert-pmie
+sudo ls -l /run/monitoring/alerting/env
 sudo ss -tnp | grep ':443'
 ```
 
-A webhook URL that is empty, not HTTPS, or rejected by the receiver is the most common cause. A missing `alerting` user or a wrong environment file owner causes the notifier to fail before it sends.
+A webhook URL that is empty, not HTTPS, or rejected by the receiver is the most common cause. A missing `alerting` user or a wrong runtime environment file owner causes the notifier to fail before it sends.
 
 ### 4.8 Access the dashboard, metrics, and monitoring UI
 
@@ -467,7 +467,7 @@ For PCP only:
 sudo ./infra/host/07-monitoring.sh none
 ```
 
-The helper installs packages, writes configuration from `infra/configs/`, enables services, and does not remove existing Grafana or Valkey state. It requires `GRAFANA_ADMIN_PASSWORD` or `GRAFANA_SECRET_OCID` when Grafana is enabled and `/data/monitoring/grafana/env` does not exist. The capacity minimums are in `docs/reference/infrastructure.md` section 8.
+The helper installs packages, writes configuration from `infra/configs/`, enables services, and does not remove existing Grafana or Valkey state. It requires `GRAFANA_SECRET_OCID` when Grafana is enabled and `/etc/secure-stack/secret-refs/grafana.env` does not exist. The capacity minimums are in `docs/reference/infrastructure.md` section 8.
 
 ## 5. Common failure patterns
 
@@ -481,7 +481,7 @@ The helper installs packages, writes configuration from `infra/configs/`, enable
 
 ### OCI Vault secret fetch fails
 
-**Symptom:** cloud-init fails at the Vault step, or `/etc/traefik/env` contains a placeholder value.
+**Symptom:** cloud-init fails at the Vault step, or `/run/traefik/env` is missing or stale.
 
 **Causes and fixes:**
 
@@ -592,16 +592,17 @@ lsmod | grep wireguard
 
 - The `grafana` user or group does not exist because the package install failed.
 - `/data/monitoring/grafana` is missing or has the wrong owner.
-- `/data/monitoring/grafana/env` is missing or has the wrong mode.
+- `/run/monitoring/grafana/env` is missing or has the wrong mode.
+- `stack-secrets-grafana.service` failed and Grafana started without the environment file.
 - Another process uses port 3000.
 
 **Checks:**
 
 ```bash
-sudo journalctl -u grafana-server -n 100
+sudo journalctl -u stack-secrets-grafana -u grafana-server -n 100
 id grafana
 ls -ld /data/monitoring/grafana
-sudo ls -l /data/monitoring/grafana/env
+sudo ls -l /run/monitoring/grafana/env
 sudo ss -ltnp | grep ':3000'
 ```
 
@@ -634,7 +635,8 @@ valkey-cli -h 127.0.0.1 ping
 
 **Causes:**
 
-- `/data/monitoring/alerting/env` is missing, empty, or not owned by `alerting`.
+- `/run/monitoring/alerting/env` is missing, empty, or not owned by `alerting`.
+- `stack-secrets-alerting.service` failed.
 - The webhook URL is not HTTPS or the receiver rejects the request.
 - `pcp-alert-pmie.service` or a timer is inactive.
 - The `alerting` user does not exist.
@@ -643,9 +645,9 @@ valkey-cli -h 127.0.0.1 ping
 **Checks:**
 
 ```bash
-systemctl status pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
-sudo journalctl -u pcp-alert-pmie -u pcp-alert-notify@test.service -n 100
-sudo ls -l /data/monitoring/alerting/env
+systemctl status stack-secrets-alerting pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+sudo journalctl -u stack-secrets-alerting -u pcp-alert-pmie -u pcp-alert-notify@test.service -n 100
+sudo ls -l /run/monitoring/alerting/env
 id alerting
 sudo systemctl start pcp-alert-notify@test.service
 ```
@@ -729,18 +731,14 @@ sudo reboot
 
 1. Create a new token in Cloudflare.
 2. Add a new secret version in OCI Vault.
-3. Update the running instance:
+3. Refresh the runtime value and restart Traefik:
 
 ```bash
-NEW_TOKEN=$(oci secrets secret-bundle get \
-  --secret-id <CF_SECRET_OCID> \
-  --query "data.secretBundleContent.content" \
-  --raw-output | base64 -d)
-echo "CF_DNS_API_TOKEN=$NEW_TOKEN" | sudo tee /etc/traefik/env
-sudo chmod 600 /etc/traefik/env
-sudo chown traefik:traefik /etc/traefik/env
+sudo systemctl restart stack-secrets-traefik.service
 sudo systemctl restart traefik
 ```
+
+The reference file already contains the secret OCID. The oneshot fetches the current Vault secret version and rewrites `/run/traefik/env`.
 
 ### 9.2 Authelia admin password
 
@@ -761,57 +759,29 @@ Update the resulting hash in `/data/authelia/config/users_database.yaml`. No Tra
 ### 9.3 Grafana admin password
 
 1. Update the `grafana-admin-password` secret in OCI Vault.
-2. Fetch the new value on the instance:
+2. Refresh the runtime value and restart Grafana:
 
 ```bash
-NEW_PASS=$(oci secrets secret-bundle get \
-  --secret-id <GRAFANA_SECRET_OCID> \
-  --query "data.secretBundleContent.content" \
-  --raw-output | base64 -d)
-```
-
-3. Replace the environment file without printing the value:
-
-```bash
-printf 'GF_SECURITY_ADMIN_PASSWORD=%s\n' "$NEW_PASS" \
-  | sudo tee /data/monitoring/grafana/env >/dev/null
-sudo chown grafana:grafana /data/monitoring/grafana/env
-sudo chmod 0600 /data/monitoring/grafana/env
+sudo systemctl restart stack-secrets-grafana.service
 sudo systemctl restart grafana-server
 ```
 
-Changing the environment file does not change an existing Grafana admin password in the database. Use the Grafana user administration page to change the stored password, or reset it with `grafana-cli` after confirming the supported syntax for the installed version.
+The reference file already contains the secret OCID. Changing `GF_SECURITY_ADMIN_PASSWORD` does not change an existing Grafana admin password in the database. Use the Grafana user administration page to change the stored password, or reset it with `grafana-cli` after confirming the supported syntax for the installed version.
 
 ### 9.4 Alert webhook and heartbeat URLs
 
 1. Create a new webhook URL or heartbeat URL at the provider.
 2. Add a new secret version in OCI Vault for `alert-webhook-url` or `alert-heartbeat-url`.
-3. Fetch the new values on the instance:
+3. Refresh the runtime values and restart the alerting units:
 
 ```bash
-NEW_WEBHOOK=$(oci secrets secret-bundle get \
-  --secret-id <ALERT_WEBHOOK_SECRET_OCID> \
-  --query "data.secretBundleContent.content" \
-  --raw-output | base64 -d)
-NEW_HEARTBEAT=$(oci secrets secret-bundle get \
-  --secret-id <ALERT_HEARTBEAT_SECRET_OCID> \
-  --query "data.secretBundleContent.content" \
-  --raw-output | base64 -d)
+sudo systemctl restart stack-secrets-alerting.service
+sudo systemctl restart pcp-alert-pmie.service pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 ```
 
-4. Replace the environment file without printing the values:
+4. Send a test alert and confirm the heartbeat provider shows a new ping.
 
-```bash
-{
-  printf 'ALERT_WEBHOOK_URL=%q\n' "$NEW_WEBHOOK"
-  printf 'ALERT_HEARTBEAT_URL=%q\n' "$NEW_HEARTBEAT"
-} | sudo tee /data/monitoring/alerting/env >/dev/null
-sudo chown alerting:alerting /data/monitoring/alerting/env
-sudo chmod 0600 /data/monitoring/alerting/env
-sudo systemctl restart pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
-```
-
-5. Send a test alert and confirm the heartbeat provider shows a new ping.
+The reference file already contains the two secret OCIDs. The oneshot fetches the current Vault secret versions and rewrites `/run/monitoring/alerting/env`.
 
 A leaked webhook URL permits alert injection. Rotate it immediately if the URL appears in a log, ticket, or chat message. The heartbeat URL is also a secret because it can be used to suppress an external alert.
 
@@ -854,7 +824,7 @@ restic snapshots
 restic restore latest --target /data
 ```
 
-The backup includes `/data/monitoring/grafana` and, when the `history` profile is active, `/data/monitoring/valkey`. The Grafana environment file contains a secret and is stored under `/data/monitoring/grafana/env`. Protect the Restic repository accordingly. If history is explicitly excluded, remove `/data/monitoring/valkey` from the backup selection and record that decision.
+The backup includes `/data/monitoring/grafana` and, when the `history` profile is active, `/data/monitoring/valkey`. The Grafana runtime environment is under `/run/monitoring/grafana/env` and is not included in the backup. Restore the password from OCI Vault. Protect the Restic repository accordingly. If history is explicitly excluded, remove `/data/monitoring/valkey` from the backup selection and record that decision.
 
 ### 11.3 Automate with systemd
 
@@ -916,7 +886,7 @@ sudo tail -f /data/logs/traefik/access.log
 
 The backup design uses Restic as the primary backup. A local secondary backup for root-filesystem Traefik configuration and ACME state can be created with `/usr/local/sbin/traefik-backup` and a daily timer. The script and unit are in `docs/reference/traefik.md`.
 
-The local backup excludes `/etc/traefik/env`. Restore the Cloudflare token from OCI Vault. The backup design covers `/data/`; it does not include `/etc/traefik/env`. Protect the Restic repository.
+The local backup excludes `/etc/secure-stack/secret-refs` and `/run`. Restore the Cloudflare token from OCI Vault. The backup design covers `/data/`; it does not include the reference files or the runtime files. Protect the Restic repository.
 
 ## 14. Audit and security checks
 
@@ -928,19 +898,20 @@ sudo ss -ltnp | grep -E ':80|:443|:3000|:6379|:8080|:8082|:44322'
 ls -l /usr/local/bin/traefik
 ls -ld /data/traefik /data/logs/traefik /etc/traefik
 ls -l /data/traefik/letsencrypt/acme.json
-ls -l /etc/traefik/env
+ls -l /etc/secure-stack/secret-refs/traefik.env
+ls -l /run/traefik/env
 id traefik
 id authelia
 loginctl show-user authelia -p Linger
 grep '^authelia:' /etc/subuid /etc/subgid
 ls -ld /data/authelia /data/containers/wg-easy
 ls -ld /data/monitoring/grafana /data/monitoring/valkey
-ls -l /data/monitoring/grafana/env
-ls -ld /data/monitoring/alerting
-ls -l /data/monitoring/alerting/env
+ls -l /run/monitoring/grafana/env
+ls -ld /etc/secure-stack/secret-refs
+ls -l /run/monitoring/alerting/env
 id alerting
 getent passwd alerting
-systemctl status pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+systemctl status stack-secrets-traefik stack-secrets-alerting stack-secrets-grafana pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 ls -l /etc/containers/systemd/wg-easy.container
 sudo runuser -u authelia -- env XDG_RUNTIME_DIR="/run/user/$(id -u authelia)" \
   systemctl --user is-active authelia.service
@@ -957,9 +928,10 @@ Expected posture:
 - `/data/authelia` is owned by `authelia:authelia`.
 - `/data/containers/wg-easy` is owned by host UID and GID `300000`.
 - `/data/traefik/letsencrypt/acme.json` is mode `0600`.
-- `/etc/traefik/env` is mode `0600` and owned by `traefik:traefik`.
-- `/data/monitoring/grafana/env` is mode `0600` and owned by `grafana:grafana`.
-- `/data/monitoring/alerting/env` is mode `0600` and owned by `alerting:alerting`.
+- `/etc/secure-stack/secret-refs/traefik.env` is mode `0600` and owned by `root:root`.
+- `/run/traefik/env` is mode `0600` and owned by `traefik:traefik`.
+- `/run/monitoring/grafana/env` is mode `0600` and owned by `grafana:grafana`.
+- `/run/monitoring/alerting/env` is mode `0600` and owned by `alerting:alerting`.
 - The alerting user has no login shell and the alerting timers are active.
 - Alert delivery uses outbound HTTPS only and has no inbound listener.
 - `/opt/traefik` and `/etc/traefik` are owned by root.

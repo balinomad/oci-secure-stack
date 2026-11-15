@@ -3,13 +3,13 @@ name: "Project Status Report"
 description: |
   Static assessment of repository state, documentation state, implementation status, risks, and explicit non-claims.
 status: active
-version: 1.10
+version: 1.11
 updated: 2026-11-15
 ---
 
 # Project Status Report
 
-Baseline: commit `2c1ae2c`, 2026-11-12.\
+Baseline: commit `dc32b8a`, 2026-11-15, plus uncommitted working tree changes.\
 Method: static analysis of repository files. No OCI deployment has been executed.
 
 ## Verdict
@@ -76,6 +76,7 @@ Implemented in the monolith:
 - PCP export through `pmproxy`, the Podman PMDA, and the OpenMetrics PMDA
 - Optional Grafana and Valkey monitoring profiles, statically configured
 - Alert delivery through PCP `pmie`, systemd failure hooks, an HTTPS webhook, and an external heartbeat, statically configured
+- Runtime secret delivery for Traefik, Grafana, and Alerting through `/etc/secure-stack/secret-refs` and per-service `/run` oneshot units, statically configured
 
 Not implemented:
 
@@ -97,6 +98,7 @@ Not implemented:
 | Version pins are unavailable or incompatible                                            | Medium, boot blocker              | Unverified       |
 | The consolidated guides are mistaken for proof of deployment                            | Medium, false confidence          | 80%              |
 | Alert delivery is configured but unproven                                               | Medium, missed failure            | 90% from code    |
+| Runtime secret materialization is configured but unproven                               | High, service start failure       | 90% from code    |
 
 ## Explicit non-claims
 

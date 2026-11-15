@@ -3,8 +3,8 @@ name: "Getting Started"
 description: |
   End-to-end tutorial for provisioning the OCI secure stack from a clean Oracle Cloud Infrastructure environment.
 status: draft
-version: 1.6
-updated: 2026-11-14
+version: 1.7
+updated: 2026-11-15
 ---
 
 # Getting Started
@@ -125,6 +125,8 @@ In OCI Vault:
 3. Paste the Cloudflare token as the secret content.
 4. Copy the secret OCID. This is `${CF_SECRET_OCID}`.
 
+Cloud-init writes the OCID to `/etc/secure-stack/secret-refs/traefik.env` with mode `0600` and owner `root:root`. `stack-secrets-traefik.service` fetches the token and writes `/run/traefik/env` with mode `0600` and owner `traefik:traefik` after every boot.
+
 ### 4.3 Authelia admin password
 
 This is the initial Authelia admin password. Authelia hashes it and stores it in its SQLite database on the block volume. The secret is only needed for bootstrapping.
@@ -153,7 +155,7 @@ This secret is required when `MONITORING_PROFILE` is `live` or `history`.
 2. Use the chosen password as plain text.
 3. Copy the secret OCID. This is `${GRAFANA_SECRET_OCID}`.
 
-Cloud-init writes the password to `/data/monitoring/grafana/env` with mode `0600` and owner `grafana:grafana`. It does not write the password to a tracked file or the system journal.
+Cloud-init writes the OCID to `/etc/secure-stack/secret-refs/grafana.env` with mode `0600` and owner `root:root`. `stack-secrets-grafana.service` fetches the password and writes `/run/monitoring/grafana/env` with mode `0600` and owner `grafana:grafana` after every boot. The password is not written to a tracked file or the system journal.
 
 ### 4.6 Alert webhook URL
 
@@ -164,7 +166,7 @@ This secret is required in every monitoring profile. It is the HTTPS endpoint th
 3. Create a Vault secret named `alert-webhook-url` with the URL as plain text.
 4. Copy the secret OCID. This is `${ALERT_WEBHOOK_SECRET_OCID}`.
 
-Cloud-init writes the value to `/data/monitoring/alerting/env` with mode `0600` and owner `alerting:alerting`. The URL is not written to a tracked file or the system journal.
+Cloud-init writes the OCID to `/etc/secure-stack/secret-refs/alerting.env` with mode `0600` and owner `root:root`. `stack-secrets-alerting.service` fetches the URL and writes `/run/monitoring/alerting/env` with mode `0600` and owner `alerting:alerting` after every boot. The URL is not written to a tracked file or the system journal.
 
 ### 4.7 External heartbeat URL
 
@@ -175,7 +177,7 @@ This secret is required in every monitoring profile. It is the HTTPS ping endpoi
 3. Create a Vault secret named `alert-heartbeat-url` with the URL as plain text.
 4. Copy the secret OCID. This is `${ALERT_HEARTBEAT_SECRET_OCID}`.
 
-Cloud-init writes the value to `/data/monitoring/alerting/env` with mode `0600` and owner `alerting:alerting`. The same file contains the webhook URL. The URL is not written to a tracked file or the system journal.
+Cloud-init adds the OCID to `/etc/secure-stack/secret-refs/alerting.env` with mode `0600` and owner `root:root`. `stack-secrets-alerting.service` writes both URLs to `/run/monitoring/alerting/env` with mode `0600` and owner `alerting:alerting` after every boot. The URL is not written to a tracked file or the system journal.
 
 The provider should alert when no heartbeat arrives for two consecutive five-minute intervals. The heartbeat does not replace the local checks. It detects a total instance or network loss.
 

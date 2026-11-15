@@ -3,8 +3,8 @@ name: "Infrastructure Reference"
 description: |
   Exact template variables, OCI network rules, DNS records, Vault secrets, persistent storage layout, and reserved ports for the stack.
 status: draft
-version: 1.5
-updated: 2026-11-14
+version: 1.6
+updated: 2026-11-15
 ---
 
 # Infrastructure Reference
@@ -100,8 +100,7 @@ Cloud-init detects the block device in this order: `/dev/oracleoci/oraclevdb`, `
 │   └── <app-name>/          # per-application data
 ├── monitoring/
 │   ├── grafana/             # Grafana database and state, owner grafana
-│   ├── valkey/              # PCP history, owner valkey, history profile only
-│   └── alerting/            # Alerting webhook and heartbeat secrets, owner alerting
+│   └── valkey/              # PCP history, owner valkey, history profile only
 └── logs/
     └── traefik/             # Traefik access and error logs
 ```
@@ -115,7 +114,7 @@ Symlinks:
 
 Authelia and wg-easy bind-mount their data directly from `/data/`. `/data/authelia` is owned by `authelia:authelia`. `/data/containers/wg-easy` is owned by host UID and GID `300000`.
 
-`/data/monitoring/grafana` is owned by `grafana:grafana`. `/data/monitoring/valkey` is owned by `valkey:valkey` and exists only in the `history` profile. `/data/monitoring/alerting` is owned by `alerting:alerting`. The monitoring directories use the `var_lib_t` SELinux type.
+`/data/monitoring/grafana` is owned by `grafana:grafana`. `/data/monitoring/valkey` is owned by `valkey:valkey` and exists only in the `history` profile. The monitoring directories use the `var_lib_t` SELinux type.
 
 ### 5.1 Service accounts and Quadlet paths
 
@@ -136,6 +135,22 @@ What persists across VM replacement:
 4. Authelia reads its existing SQLite database.
 
 The OS, Traefik binary, and container images are recreated.
+
+### 5.2 Runtime secret materialization
+
+`/etc/secure-stack/secret-refs` is owned by root with mode `0700`. Each reference file is owned by root with mode `0600` and contains `KEY=ocid1...` lines only. The reference files never contain secret values.
+
+The root helper `/usr/local/libexec/stack-secret-env` reads a reference file, fetches each value from OCI Vault with Instance Principal authentication, and writes the runtime environment file atomically with mode `0600`.
+
+| Service  | Reference file                               | Runtime file                   | Oneshot unit                     |
+| -------- | -------------------------------------------- | ------------------------------ | -------------------------------- |
+| Traefik  | `/etc/secure-stack/secret-refs/traefik.env`  | `/run/traefik/env`             | `stack-secrets-traefik.service`  |
+| Grafana  | `/etc/secure-stack/secret-refs/grafana.env`  | `/run/monitoring/grafana/env`  | `stack-secrets-grafana.service`  |
+| Alerting | `/etc/secure-stack/secret-refs/alerting.env` | `/run/monitoring/alerting/env` | `stack-secrets-alerting.service` |
+
+Each consumer unit declares `Requires=` and `After=` for its oneshot unit. The oneshot writes a new file after every boot. `/run` is tmpfs, so the runtime values do not persist across a reboot or a block-volume backup.
+
+Authelia and wg-easy keep persistent environment files until ADR-012 Phase 4 and D10 close. Those files are `/data/authelia/env` and `/data/containers/wg-easy/env`.
 
 ## 6. Reserved ports
 
@@ -237,7 +252,7 @@ The live profile installs `grafana` and `grafana-pcp`. It provides one local Gra
 
 Grafana loads the PCP plugin from the `grafana-pcp` RPM. The RPM does not include plugin signatures, so `/etc/grafana/grafana.ini` allows the PCP plugin IDs explicitly. Do not add other unsigned plugins to that list.
 
-Systemd drop-ins under `/etc/systemd/system/grafana-server.service.d/` load `/data/monitoring/grafana/env` and grant write access to `/data/monitoring/grafana`.
+Systemd drop-ins under `/etc/systemd/system/grafana-server.service.d/` load `/run/monitoring/grafana/env` and grant write access to `/data/monitoring/grafana`. `stack-secrets-grafana.service` writes the runtime file from OCI Vault before Grafana starts.
 
 ### 8.5 History profile
 
@@ -276,7 +291,7 @@ Then open `http://localhost:3000`. Valkey access is for local administration onl
 
 Grafana state is stored under `/data/monitoring/grafana`. Valkey state is stored under `/data/monitoring/valkey` when the history profile is active. Both paths are on the block volume and survive VM replacement when the volume is attached and mounted.
 
-The Grafana environment file is `/data/monitoring/grafana/env`, mode `0600`, owner `grafana:grafana`. Cloud-init creates it from OCI Vault on first boot and does not overwrite an existing file.
+The Grafana reference file is `/etc/secure-stack/secret-refs/grafana.env`, mode `0600`, owner `root:root`. It contains the Vault secret OCID only. `stack-secrets-grafana.service` writes `/run/monitoring/grafana/env`, mode `0600`, owner `grafana:grafana`, after every boot.
 
 ### 8.8 Verification
 
@@ -341,12 +356,12 @@ The `pmie` rules are in `/etc/pcp/pmie/stack-alerts.pmie`. The service list is `
 
 ### 9.3 Secrets
 
-| Secret name           | Runtime file                    | Owner and mode              |
-| --------------------- | ------------------------------- | --------------------------- |
-| `alert-webhook-url`   | `/data/monitoring/alerting/env` | `alerting:alerting`, `0600` |
-| `alert-heartbeat-url` | `/data/monitoring/alerting/env` | `alerting:alerting`, `0600` |
+| Secret name           | Runtime file                   | Owner and mode              |
+| --------------------- | ------------------------------ | --------------------------- |
+| `alert-webhook-url`   | `/run/monitoring/alerting/env` | `alerting:alerting`, `0600` |
+| `alert-heartbeat-url` | `/run/monitoring/alerting/env` | `alerting:alerting`, `0600` |
 
-The webhook URL must use HTTPS. The heartbeat URL must use HTTPS. The runtime file contains both values. Do not store either value in a tracked file.
+The reference file `/etc/secure-stack/secret-refs/alerting.env` contains the two OCIDs. `stack-secrets-alerting.service` writes the runtime file before the alerting units start. The webhook URL must use HTTPS. The heartbeat URL must use HTTPS. Do not store either value in a tracked file.
 
 ### 9.4 Exposure
 
@@ -355,9 +370,9 @@ Alert delivery adds no inbound port and no Traefik route. The only network flow 
 ### 9.5 Verification
 
 ```bash
-systemctl is-active pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
+systemctl is-active stack-secrets-alerting.service pcp-alert-pmie pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 sudo runuser -u alerting -- pmie -C -c /etc/pcp/pmie/stack-alerts.pmie
-ls -l /data/monitoring/alerting/env
+ls -l /run/monitoring/alerting/env
 systemctl list-timers pcp-service-check.timer pcp-cert-check.timer pcp-heartbeat.timer
 ```
 

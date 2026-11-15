@@ -3,7 +3,7 @@ name: "Acceptance Criteria"
 description: |
   Acceptance checklist for proving a deployment, covering prerequisites, boot, services, security, recovery, and release criteria.
 status: active
-version: 1.7
+version: 1.8
 updated: 2026-11-15
 ---
 
@@ -57,22 +57,23 @@ Evidence source: command output, log excerpt, test screenshot, or a linked findi
 
 ## 4. Security controls
 
-| ID  | Criterion                                                              | Evidence                                          | Status       |
-| --- | ---------------------------------------------------------------------- | ------------------------------------------------- | ------------ |
-| X1  | Admin URLs return 403 without VPN                                      | Client test without tunnel                        | Claimed      |
-| X2  | Admin URLs require password and TOTP over VPN                          | Client test                                       | Claimed      |
-| X3  | No admin surface bypasses Authelia, including direct ports             | Port scan from VPN                                | Claimed      |
-| X4  | Dashboard and metrics follow the exposure model in ADR-001             | Config review plus port scan                      | Claimed      |
-| X5  | Security headers are present on admin responses                        | `curl -I`                                         | Contradicted |
-| X6  | SELinux is enforcing with no AVC denials                               | `getenforce`, `ausearch`                          | Claimed      |
-| X7  | firewalld exposes only 80, 443, 51820/udp, and bootstrap SSH           | `firewall-cmd --list-all`                         | Claimed      |
-| X8  | SSH is closed after the first peer is verified                         | OCI security list                                 | Claimed      |
-| X9  | Secrets are absent from templates, manifests, and world-readable files | Config review; `deploy-service.sh` `--secret-env` | Claimed      |
-| X10 | Vault fetch failure prevents boot rather than degrading silently       | Negative test                                     | Contradicted |
-| X11 | Authelia runs as a rootless user unit                                  | User unit, `/etc/subuid`                          | Claimed      |
-| X12 | wg-easy uses a user namespace without SYS_MODULE                       | Podman inspect output                             | Claimed      |
-| X13 | The alerting environment file is mode 0600 and owned by `alerting`     | `stat`, `ls -l`                                   | Claimed      |
-| X14 | Alert delivery adds no inbound port and uses HTTPS only                | `ss -ltnp`, firewall export, config review        | Claimed      |
+| ID  | Criterion                                                                                    | Evidence                                                              | Status       |
+| --- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------ |
+| X1  | Admin URLs return 403 without VPN                                                            | Client test without tunnel                                            | Claimed      |
+| X2  | Admin URLs require password and TOTP over VPN                                                | Client test                                                           | Claimed      |
+| X3  | No admin surface bypasses Authelia, including direct ports                                   | Port scan from VPN                                                    | Claimed      |
+| X4  | Dashboard and metrics follow the exposure model in ADR-001                                   | Config review plus port scan                                          | Claimed      |
+| X5  | Security headers are present on admin responses                                              | `curl -I`                                                             | Contradicted |
+| X6  | SELinux is enforcing with no AVC denials                                                     | `getenforce`, `ausearch`                                              | Claimed      |
+| X7  | firewalld exposes only 80, 443, 51820/udp, and bootstrap SSH                                 | `firewall-cmd --list-all`                                             | Claimed      |
+| X8  | SSH is closed after the first peer is verified                                               | OCI security list                                                     | Claimed      |
+| X9  | Secrets are absent from templates, manifests, and world-readable files                       | Config review; `deploy-service.sh` `--secret-env`; `stack-secret-env` | Claimed      |
+| X10 | Vault fetch failure prevents boot rather than degrading silently                             | Negative test; static failure path implemented                        | Claimed      |
+| X11 | Authelia runs as a rootless user unit                                                        | User unit, `/etc/subuid`                                              | Claimed      |
+| X12 | wg-easy uses a user namespace without SYS_MODULE                                             | Podman inspect output                                                 | Claimed      |
+| X13 | The alerting runtime environment file under `/run` is mode 0600 and owned by `alerting`      | `stat`, `ls -l`                                                       | Claimed      |
+| X14 | Alert delivery adds no inbound port and uses HTTPS only                                      | `ss -ltnp`, firewall export, config review                            | Claimed      |
+| X15 | Traefik and Grafana runtime environment files are mode 0600 and owned by their service users | `stat`, `ls -l`                                                       | Claimed      |
 
 ## 5. Disposability and recovery
 

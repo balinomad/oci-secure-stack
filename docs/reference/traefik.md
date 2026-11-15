@@ -3,7 +3,7 @@ name: "Traefik Reference"
 description: |
   Exact Traefik static and dynamic configuration, systemd unit, binary update, backup, logging, audit, and SELinux settings for the host.
 status: draft
-version: 1.6
+version: 1.7
 updated: 2026-11-15
 ---
 
@@ -219,15 +219,15 @@ The Traefik dashboard and metrics are not routed through public hostnames. The d
 ```ini
 [Unit]
 Description=Traefik reverse proxy
-After=network-online.target local-fs.target
+After=network-online.target local-fs.target stack-secrets-traefik.service
 Wants=network-online.target
-Requires=local-fs.target
+Requires=local-fs.target stack-secrets-traefik.service
 
 [Service]
 Type=simple
 User=traefik
 Group=traefik
-EnvironmentFile=/etc/traefik/env
+EnvironmentFile=/run/traefik/env
 ExecStart=/opt/traefik/bin/traefik --configFile=/etc/traefik/traefik.yaml
 Restart=on-failure
 RestartSec=5
@@ -278,24 +278,26 @@ sudo install -d -m 0750 -o traefik -g traefik /data/logs/traefik
 sudo install -d -m 0700 -o root -g root /data/backups/traefik
 ```
 
-ACME state and secret environment:
+ACME state and secret reference:
 
 ```bash
 sudo install -m 0600 -o traefik -g traefik /dev/null /data/traefik/letsencrypt/acme.json
-sudo install -m 0600 -o traefik -g traefik /dev/null /etc/traefik/env
+sudo install -d -m 0700 -o root -g root /etc/secure-stack/secret-refs
+sudo install -m 0600 -o root -g root /dev/null \
+  /etc/secure-stack/secret-refs/traefik.env
 ```
 
-`/etc/traefik/env` contains:
+`/etc/secure-stack/secret-refs/traefik.env` contains:
 
 ```text
-CF_DNS_API_TOKEN=replace-with-token-from-oci-vault
+CF_DNS_API_TOKEN=ocid1.vaultsecret.oc1..xxxx
 ```
 
-The file must be owned by `traefik:traefik` and mode `0600`. The token must not appear in `traefik.yaml`.
+The reference file must be owned by `root:root` and mode `0600`. It contains the Vault secret OCID, not the token. `stack-secrets-traefik.service` fetches the token and writes `/run/traefik/env` with owner `traefik:traefik` and mode `0600` after every boot. The token must not appear in `traefik.yaml` or the reference file.
 
 ### 4.1 Tracked deployment script
 
-`infra/host/03-traefik.sh` is the supported install and repair path. It reads the architecture, repository, resolved asset name, version, and SHA256 from `infra/manifest.lock.yaml`, rejects a host architecture that does not match the lock, and verifies the release archive SHA256 before installation. The host script does not hardcode the GitHub repository or asset name. `tools/render-config.sh` injects the same locked architecture, repository, asset name, version, and SHA256 into the cloud-init template. The first cloud-init command also checks the target architecture before any host change. The deployment does not create a release metadata file on the target. The version constraint and GitHub release source are in `infra/manifest.yaml` under `components.traefik.version` and `components.traefik.source`. `tools/update-lock.sh` resolves the latest stable release that matches the constraint and refreshes the lock. It creates `/data/traefik/letsencrypt` and `/data/logs/traefik`, creates `/etc/traefik/letsencrypt` and `/var/log/traefik` as symlinks to persistent storage, writes `/etc/traefik/env`, installs the unit and logrotate file, opens TCP 80 and 443, and checks `/ping`, `/metrics`, and the HTTP redirect.
+`infra/host/03-traefik.sh` is the supported install and repair path. It reads the architecture, repository, resolved asset name, version, and SHA256 from `infra/manifest.lock.yaml`, rejects a host architecture that does not match the lock, and verifies the release archive SHA256 before installation. The host script does not hardcode the GitHub repository or asset name. `tools/render-config.sh` injects the same locked architecture, repository, asset name, version, and SHA256 into the cloud-init template. The first cloud-init command also checks the target architecture before any host change. The deployment does not create a release metadata file on the target. The version constraint and GitHub release source are in `infra/manifest.yaml` under `components.traefik.version` and `components.traefik.source`. `tools/update-lock.sh` resolves the latest stable release that matches the constraint and refreshes the lock. It creates `/data/traefik/letsencrypt` and `/data/logs/traefik`, creates `/etc/traefik/letsencrypt` and `/var/log/traefik` as symlinks to persistent storage, writes `/etc/secure-stack/secret-refs/traefik.env`, installs the units and logrotate file, starts `stack-secrets-traefik.service`, opens TCP 80 and 443, and checks `/ping`, `/metrics`, and the HTTP redirect.
 
 Existing Traefik configuration files under `/etc/traefik` are preserved. The script renders a missing file from `infra/configs/traefik/` and requires `DOMAIN` and `ACME_EMAIL` for that case.
 

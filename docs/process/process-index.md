@@ -3,7 +3,7 @@ name: "Process Record"
 description: |
   Index and maintenance rules for the project process record, including the status legend and evidence rules.
 status: active
-version: 1.10
+version: 1.11
 updated: 2026-11-15
 ---
 
@@ -43,7 +43,7 @@ Project-defining material lives outside this directory:
 | Application deployment | `infra/host/deploy-service.sh`                |
 | Documentation audit    | `tools/audit-docs.sh`                         |
 
-Baseline: commit `2c1ae2c`, 2026-11-12.\
+Baseline: commit `dc32b8a`, 2026-11-15, plus uncommitted working tree changes.\
 Method: static analysis of repository files. No OCI deployment has been executed.
 
 ## Document map

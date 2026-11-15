@@ -3,7 +3,7 @@ name: "OCI Secure Stack Delivery Plan"
 description: |
   Decision-first plan for resuming work, with phases, tasks, gates, estimates, and immediate next actions.
 status: active
-version: 1.7
+version: 1.8
 updated: 2026-11-15
 ---
 
@@ -61,7 +61,7 @@ Only findings that follow from confirmed decisions are fixed here.
 
 - [ ] C1 Add `tools/validate.sh`: YAML, cloud-init schema, shellcheck, envsubst completeness.
 - [ ] C2 F2 and F3: hard-fail when `/data` is absent or not XFS.
-- [ ] C3 F4: abort boot when a Vault secret cannot be fetched.
+- [ ] C3 F4: abort boot when a Vault secret cannot be fetched. Phase 3 implements the static failure path; deployment proof is pending.
 - [ ] C4 F1: resolve Authelia UID and ownership; prove file access.
 - [ ] C5 F5: replace the host-side WireGuard check with a container-side or end-to-end check.
 - [ ] C6 F6: implement ADR-001 for dashboard and metrics.
@@ -71,6 +71,7 @@ Only findings that follow from confirmed decisions are fixed here.
 - [ ] C10 F11 and F13: fix manifest permissions and volume validation.
 - [ ] C11 F15: verify version pins against upstream.
 - [x] C12 F24: update stale README, `.env.example`, and `CONTRIBUTING.md` paths.
+- [ ] C13 Phase 3: deliver Traefik, Grafana, and Alerting runtime secrets from `/run` with per-service oneshot units. Static implementation is complete; reboot, rotation, Vault-failure, and permission gates are pending.
 
 Gate GC: static validation green, every P0 finding closed or explicitly deferred with a decision reference.
 

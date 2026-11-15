@@ -3,7 +3,7 @@ name: "ADR-012: Runtime Secret Delivery"
 description: |
   Decision to keep OCI Vault as the only durable secret store and deliver runtime secret values through ephemeral files or service credentials.
 status: draft
-version: 1.0
+version: 1.1
 updated: 2026-11-15
 ---
 
@@ -28,11 +28,23 @@ The stack reads secrets from OCI Vault at boot. Several services keep runtime co
 - `infra/configs/podman/wg-easy.container`
 - `infra/configs/systemd/traefik.service`
 - `infra/configs/systemd/grafana-server.service.d/env.conf`
+- `infra/configs/systemd/stack-secrets-traefik.service`
+- `infra/configs/systemd/stack-secrets-grafana.service`
+- `infra/configs/systemd/stack-secrets-alerting.service`
+- `infra/configs/systemd/stack-secrets.conf`
+- `infra/runtime/secrets/materialize.sh`
 - `infra/manifest.yaml`
+- `infra/manifest.schema.json`
+- `tools/validate-manifest.sh`
+- `infra/host/verify-stack.sh`
 
 ## Current text or behavior
 
-OCI Vault is the source for Vault-backed secrets. Runtime copies exist at `/etc/traefik/env`, `/data/authelia/env`, `/data/monitoring/grafana/env`, `/data/monitoring/alerting/env`, and `/data/containers/wg-easy/env`. `infra/host/deploy-service.sh` writes `--env` values into `Environment=` and a `0755` manifest. Authelia generates its JWT, session, and storage encryption keys on first boot and persists them in `/data/authelia/env`.
+OCI Vault is the source for Vault-backed secrets. Phase 1 and Phase 2 make `infra/host/deploy-service.sh` write application values to `/run/apps/<name>/env` with mode `0600` and record OCIDs in the deployment manifest.
+
+Phase 3 adds `/usr/local/libexec/stack-secret-env` and three oneshot units. The reference files `/etc/secure-stack/secret-refs/{traefik,grafana,alerting}.env` contain OCIDs only. The oneshot units write `/run/traefik/env`, `/run/monitoring/grafana/env`, and `/run/monitoring/alerting/env`. Traefik, Grafana, and the alerting units require their oneshot unit.
+
+Authelia still generates its JWT, session, and storage encryption keys on first boot and persists them in `/data/authelia/env`. wg-easy still uses `/data/containers/wg-easy/env`. Phase 4 and D10 remain open.
 
 ## Contradiction
 
@@ -74,6 +86,7 @@ Adopt option 2. Use `/run` for environment-only services. Use systemd credential
 - Secret rotation requires a service restart and a Vault update. It does not require a manifest edit.
 - The Authelia storage encryption key is a durable Vault value. Losing it makes the database unreadable.
 - F11 remains `Needs verification` until a deployment test confirms the runtime path. X9 remains `Claimed` until the same test.
+- Phase 3 is implemented but not proven. No deployment evidence exists for a reboot, a Vault failure, or a secret rotation.
 - The wg-easy migration is blocked on the disposable test in `docs/process/delivery-plan.md` D10.
 
 ## Open questions

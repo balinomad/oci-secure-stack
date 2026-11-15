@@ -3,7 +3,7 @@ name: "ADR-011: Alert Delivery"
 description: |
   Decision to deliver local alerts through PCP pmie, systemd failure hooks, an HTTPS webhook, and an external heartbeat.
 status: draft
-version: 1.3
+version: 1.4
 updated: 2026-11-15
 ---
 
@@ -62,7 +62,7 @@ PCP is already installed and provides `pmie` for local threshold evaluation. sys
 
 ## Current text or behavior
 
-The implementation adds a dedicated `alerting` system user, a notifier, a dedicated `pmie` instance, service and certificate timers, an external heartbeat timer, and failure hooks for the core system units. The runtime webhook and heartbeat URLs come from OCI Vault and are stored in `/data/monitoring/alerting/env`.
+The implementation adds a dedicated `alerting` system user, a notifier, a dedicated `pmie` instance, service and certificate timers, an external heartbeat timer, and failure hooks for the core system units. The runtime webhook and heartbeat URLs come from OCI Vault. ADR-012 moves the runtime copy to `/run/monitoring/alerting/env` and leaves the OCIDs in `/etc/secure-stack/secret-refs/alerting.env`.
 
 ## Contradiction
 
@@ -97,7 +97,7 @@ Adopt option 2. Use the existing PCP data plane for local threshold evaluation a
 5. `pcp-heartbeat.timer` sends an external heartbeat every five minutes. The external provider alerts when the heartbeat stops.
 6. Alert delivery uses one HTTPS webhook. SMTP is not used because OCI blocks outbound TCP 25 by default.
 7. The `alerting` system user owns the notifier, `pmie` alert instance, service checks, and heartbeat. It has no login shell and a service-owned state directory.
-8. The webhook and heartbeat URLs come from OCI Vault as `alert-webhook-url` and `alert-heartbeat-url`. They are stored in `/data/monitoring/alerting/env`, mode `0600`, owner `alerting:alerting`.
+8. The webhook and heartbeat URLs come from OCI Vault as `alert-webhook-url` and `alert-heartbeat-url`. ADR-012 materializes them in `/run/monitoring/alerting/env`, mode `0600`, owner `alerting:alerting`. The reference file `/etc/secure-stack/secret-refs/alerting.env` contains the OCIDs only.
 9. Alerts use a JSON payload with `source`, `message`, `host`, and `time`. The notifier deduplicates transitions and applies a 30-minute cooldown to repeated `pmie` conditions.
 10. No inbound port or Traefik route is added. The only network flow is outbound HTTPS.
 11. The external heartbeat provider and the webhook receiver are deployment prerequisites. The stack does not include a receiver.
